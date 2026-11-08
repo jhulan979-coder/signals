@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="hi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Intraday Signals (personal)</title>
+<style>
+:root{--bg:#101316;--card:#1a1f24;--line:#2c343c;--tx:#eceff1;--mu:#9aa7b0;--sf:#ff9933;--g:#3ddc84;--r:#ff5252}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.45 system-ui,sans-serif;padding:12px;max-width:560px;margin:auto}
+h1{font-size:20px;margin:6px 0 2px}
+.sub{color:var(--mu);font-size:12.5px;margin-bottom:10px}
+details{background:var(--card);border:1px solid var(--line);border-radius:14px;margin:10px 0;padding:0 12px}
+summary{padding:13px 0;font-weight:700;cursor:pointer}
+label{display:block;font-size:12.5px;color:var(--mu);margin:10px 0 3px}
+input,select,textarea{width:100%;background:#0f1215;color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:10px;font:inherit}
+textarea{min-height:70px}
+button{background:var(--sf);color:#1a1100;border:0;border-radius:10px;padding:11px 14px;font:inherit;font-weight:700;margin:8px 6px 8px 0}
+button.s{background:#2b333b;color:var(--tx)}
+button:disabled{opacity:.5}
+.row{display:flex;gap:8px}.row>*{flex:1}
+.mu{color:var(--mu);font-size:12.5px}
+.box{background:#12171b;border:1px solid var(--line);border-radius:12px;padding:10px;margin:8px 0}
+.buy{border-left:5px solid var(--g)}.sell{border-left:5px solid var(--r)}
+.pill{display:inline-block;border-radius:20px;padding:2px 9px;font-size:12px;font-weight:700}
+.pg{background:#12301f;color:var(--g)}.pr{background:#3a1717;color:var(--r)}.po{background:#3a2a10;color:var(--sf)}
+.warn{background:#3a2a10;border:1px solid #6b4a14;border-radius:10px;padding:9px;font-size:12.5px;margin:8px 0}
+pre{white-space:pre-wrap;margin:0;font:12.5px/1.5 ui-monospace,monospace}
+.g{color:var(--g)}.r{color:var(--r)}
+</style>
+</head>
+<body>
+<h1>📊 Intraday Signals</h1>
+<div class="sub">Sirf personal use. Din me zyada se zyada 2 signal. Ye salah nahi hai, pehle backtest aur paper trade dekho.</div>
+
+<details open id="dLogin"><summary>1. Angel One login</summary>
+<div class="warn">Keys sirf is browser me rehti hain. Kisi ko mat bhejna, kisi aur site par mat daalna. PIN aur TOTP save nahi hote.</div>
+<label>API key (SmartAPI)</label><input id="apiKey" autocomplete="off">
+<label>Client code</label><input id="client" autocomplete="off">
+<label>PIN (Angel One account ka)</label><input id="pin" type="password" autocomplete="off">
+<label>TOTP (6 digit, abhi ka)</label><input id="totp" inputmode="numeric" maxlength="6" autocomplete="off">
+<button id="bLogin">Login karo</button><button class="s" id="bLogout">Logout</button>
+<div id="loginSt" class="mu"></div>
+</details>
+
+<details id="dSet"><summary>2. Settings aur watchlist</summary>
+<label>Watchlist (naam, comma ya space se; token pata ho to NAAM:TOKEN)</label>
+<textarea id="wl"></textarea>
+<button class="s" id="bTok">Tokens dhundo</button><div id="tokSt" class="mu"></div>
+<div class="row"><div><label>Capital (₹)</label><input id="cap" type="number"></div><div><label>Risk har trade par (%)</label><input id="riskPct" type="number" step="0.1"></div></div>
+<div class="row"><div><label>Kharcha, aana-jaana (% price ka)</label><input id="cost" type="number" step="0.01"></div><div><label>Din me max signal</label><input id="maxSig" type="number" min="1" max="2"></div></div>
+<div class="row"><div><label>Opening range min (%)</label><input id="minRange" type="number" step="0.05"></div><div><label>Opening range max (%)</label><input id="maxRange" type="number" step="0.05"></div></div>
+<div class="row"><div><label>Kam se kam volume (x)</label><input id="minVol" type="number" step="0.1"></div><div><label>Kam se kam score (10 me)</label><input id="minScore" type="number" step="0.5"></div></div>
+<button id="bSave">Settings save karo</button>
+<div class="mu">Rule: pehle 15 min ki range (9:15-9:30) toote, volume badha ho, VWAP aur market ki disha ke saath. Stop = range ka doosra kinara, target = 2x risk, 3:15 par band.</div>
+</details>
+
+<details open id="dLive"><summary>3. Live signal</summary>
+<div class="row"><button id="bStart">Scan shuru</button><button class="s" id="bStop">Ruko</button></div>
+<div id="liveSt" class="mu"></div>
+<div id="sigs"></div>
+<div id="watch" class="mu"></div>
+</details>
+
+<details id="dBt"><summary>4. Backtest (purane data par)</summary>
+<div class="row"><div><label>Kitne mahine</label><select id="btM"><option>3</option><option>6</option></select></div></div>
+<button id="bBt">Backtest chalao</button><button class="s" id="bBtStop">Roko</button>
+<div id="btSt" class="mu"></div><div id="btOut"></div>
+</details>
+
+<details id="dJ"><summary>5. Journal (paper trade)</summary>
+<button class="s" id="bEval">Natija nikaalo</button><button class="s" id="bClr">Journal saaf</button>
+<div id="jOut"></div>
+</details>
+
+<script>
+(function(){
+'use strict';
+var $=function(id){return document.getElementById(id)};
+var BASE='https://apiconnect.angelbroking.com';
+var DEF_WL='RELIANCE HDFCBANK ICICIBANK INFY TCS SBIN AXISBANK KOTAKBANK LT ITC BHARTIARTL TATASTEEL MARUTI SUNPHARMA BAJFINANCE HINDUNILVR NTPC ONGC POWERGRID M&M';
+var DEF={cap:100000,riskPct:0.5,cost:0.10,maxSig:2,minVol:1.5,minScore:5,orMin:15,lastEntry:'10:55',exitT:'15:10',minRange:0.3,maxRange:1.5,minRisk:0.25,maxRisk:1.0};
+var S={jwt:'',pubIp:'',data:{},run:false,btStop:false,tm:null};
+function ld(k,d){try{var v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(e){return d}}
+function sv(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+function sleep(ms){return new Promise(function(r){setTimeout(r,ms)})}
+function delay(){return typeof window.SIG_DELAY==='number'?window.SIG_DELAY:450}
+function f2(x){return (Math.round(x*100)/100).toFixed(2)}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function istNow(){var d=new Date();return new Date(d.getTime()+(330+d.getTimezoneOffset())*60000)}
+function ymd(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function hm(d){return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')}
+function addDays(s,n){var d=new Date(s+'T12:00:00');d.setDate(d.getDate()+n);return ymd(d)}
+function addMin(t,m){var a=t.split(':'),x=+a[0]*60+ +a[1]+m;return String(Math.floor(x/60)).padStart(2,'0')+':'+String(x%60).padStart(2,'0')}
+function cfg(){var c=ld('sig_cfg',{});var o={};for(var k in DEF)o[k]=(c[k]!=null?c[k]:DEF[k]);return o}
+
+/* ---------- storage (IndexedDB cache) ---------- */
+function idb(){return new Promise(function(res,rej){var r=indexedDB.open('sig',1);r.onupgradeneeded=function(){r.result.createObjectStore('c')};r.onsuccess=function(){res(r.result)};r.onerror=function(){rej(r.error)}})}
+async function idbGet(k){try{var d=await idb();return await new Promise(function(r){var q=d.transaction('c').objectStore('c').get(k);q.onsuccess=function(){r(q.result)};q.onerror=function(){r(null)}})}catch(e){return null}}
+async function idbSet(k,v){try{var d=await idb();await new Promise(function(r){var tx=d.transaction('c','readwrite');tx.objectStore('c').put(v,k);tx.oncomplete=r;tx.onerror=r})}catch(e){}}
+
+/* ---------- http / Angel One ---------- */
+async function http(method,url,headers,body){
+ var cap=window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.CapacitorHttp;
+ if(cap&&cap.request){
+  var r=await cap.request({url:url,method:method,headers:headers,data:body});
+  var d=r.data;if(typeof d==='string'){try{d=JSON.parse(d)}catch(e){}}
+  return {status:r.status,json:d};
+ }
+ var res;
+ try{res=await fetch(url,{method:method,headers:headers,body:body?JSON.stringify(body):undefined})}
+ catch(e){throw new Error('Browser ne request roki ya internet nahi hai (CORS ya network)')}
+ var j=null;try{j=await res.json()}catch(e){}
+ return {status:res.status,json:j};
+}
+function hdr(auth){
+ var h={'Content-Type':'application/json','Accept':'application/json','X-UserType':'USER','X-SourceID':'WEB','X-ClientLocalIP':'127.0.0.1','X-ClientPublicIP':S.pubIp||'127.0.0.1','X-MACAddress':'00:00:00:00:00:00','X-PrivateKey':ld('sig_key','')};
+ if(auth)h['Authorization']='Bearer '+S.jwt;
+ return h;
+}
+async function api(path,body,auth){
+ var last=null;
+ for(var k=0;k<4;k++){
+  var r=await http('POST',BASE+path,hdr(auth),body);
+  var j=r.json;
+  if(j&&j.status===true)return j;
+  var msg=(j&&(j.message||''))+' '+(j&&j.errorcode||'');
+  last=new Error((msg.trim()||('HTTP '+r.status)));
+  if(/access rate|exceeding|rate limit|AB1004/i.test(msg)||r.status===429){await sleep(1500*(k+1));continue}
+  throw last;
+ }
+ throw last;
+}
+async function login(){
+ var key=$('apiKey').value.trim(),cl=$('client').value.trim().toUpperCase(),pin=$('pin').value.trim(),totp=$('totp').value.trim();
+ if(!key||!cl||!pin||totp.length!==6){$('loginSt').textContent='API key, client code, PIN aur 6 digit TOTP bharo.';return}
+ sv('sig_key',key);sv('sig_client',cl);
+ $('loginSt').textContent='Login ho raha hai...';
+ try{
+  try{var ip=await http('GET','https://api.ipify.org?format=json',{},null);if(ip.json&&ip.json.ip)S.pubIp=ip.json.ip}catch(e){}
+  var j=await api('/rest/auth/angelbroking/user/v1/loginByPassword',{clientcode:cl,password:pin,totp:totp},false);
+  S.jwt=j.data.jwtToken;
+  try{sessionStorage.setItem('sig_jwt',JSON.stringify({d:ymd(istNow()),t:S.jwt}))}catch(e){}
+  $('pin').value='';$('totp').value='';
+  $('loginSt').innerHTML='<span class="g">Login ho gaya.</span> Ye aaj ke din ke liye chalega.';
+ }catch(e){
+  $('loginSt').innerHTML='<span class="r">Login nahi hua: '+esc(e.message)+'</span>';
+ }
+}
+function chunks(from,to){var out=[],a=from;while(a<=to){var b=addDays(a,29);if(b>to)b=to;out.push([a,b]);a=addDays(b,1)}return out}
+function parseRows(rows){
+ return (rows||[]).map(function(r){return {d:String(r[0]).slice(0,10),t:String(r[0]).slice(11,16),o:+r[1],h:+r[2],l:+r[3],c:+r[4],v:+r[5]}});
+}
+async function getCandles(token,from,to){
+ var all=[],today=ymd(istNow());
+ var ch=chunks(from,to);
+ for(var i=0;i<ch.length;i++){
+  var a=ch[i][0],b=ch[i][1],key='c5|'+token+'|'+a+'|'+b,rows=null;
+  if(b<today)rows=await idbGet(key);
+  if(!rows){
+   var j=await api('/rest/secure/angelbroking/historical/v1/getCandleData',{exchange:'NSE',symboltoken:String(token),interval:'FIVE_MINUTE',fromdate:a+' 09:15',todate:b+' 15:30'},true);
+   rows=j.data||[];
+   if(b<today&&rows.length)await idbSet(key,rows);
+   await sleep(delay());
+  }
+  all=all.concat(parseRows(rows));
+ }
+ return all;
+}
+function byDay(cs){
+ var m={};cs.forEach(function(c){(m[c.d]=m[c.d]||[]).push(c)});
+ Object.keys(m).forEach(function(d){m[d].sort(function(a,b){return a.t<b.t?-1:1});if(m[d].length<40)delete m[d]});
+ return m;
+}
+
+/* ---------- watchlist / tokens ---------- */
+function parseWL(){
+ return $('wl').value.split(/[\s,]+/).filter(Boolean).map(function(x){var p=x.toUpperCase().split(':');return {sym:p[0],token:p[1]||''}});
+}
+async function findTokens(){
+ var st=$('tokSt');st.textContent='Instrument list download ho rahi hai (badi file hai, thoda ruko)...';
+ var urls=['https://margincalculator.angelone.in/OpenAPI_File/files/OpenAPIScripMaster.json','https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json'];
+ var list=null;
+ for(var i=0;i<urls.length&&!list;i++){
+  try{var r=await http('GET',urls[i],{},null);if(Array.isArray(r.json))list=r.json}catch(e){}
+ }
+ if(!list){st.innerHTML='<span class="r">List nahi mili. NAAM:TOKEN likh kar khud token daal sakte ho.</span>';return}
+ var map={};
+ list.forEach(function(x){if(x.exch_seg==='NSE'&&/-EQ$/.test(x.symbol))map[x.symbol.replace(/-EQ$/,'')]=x.token});
+ sv('sig_tokens',map);
+ reportTokens();
+}
+function reportTokens(){
+ var map=ld('sig_tokens',{}),wl=parseWL(),miss=[];
+ wl.forEach(function(w){if(!w.token&&!map[w.sym])miss.push(w.sym)});
+ $('tokSt').innerHTML=(wl.length-miss.length)+'/'+wl.length+' ke token mile.'+(miss.length?' <span class="r">Nahi mile: '+esc(miss.join(', '))+'</span>':'');
+}
+function resolved(){
+ var map=ld('sig_tokens',{}),out=[];
+ parseWL().forEach(function(w){var t=w.token||map[w.sym];if(t)out.push({sym:w.sym,token:String(t)})});
+ return out;
+}
+
+/* ---------- strategy ---------- */
+function vwapSeries(cs){var pv=0,vv=0;return cs.map(function(c){pv+=(c.h+c.l+c.c)/3*c.v;vv+=c.v;return vv>0?pv/vv:c.c})}
+function detect(cs,P,breadth,K){
+ var nOR=P.orMin/5;
+ if(cs.length<nOR+2)return null;
+ var orH=-1e18,orL=1e18,cumV=0,i;
+ for(i=0;i<nOR;i++){orH=Math.max(orH,cs[i].h);orL=Math.min(orL,cs[i].l);cumV+=cs[i].v}
+ var vw=vwapSeries(cs);
+ for(i=nOR;i<cs.length;i++){
+  var c=cs[i];
+  if(c.t>P.lastEntry)break;
+  var up=c.c>orH,dn=c.c<orL;
+  if(up||dn){
+   var dir=up?1:-1,avgV=cumV/i,vr=avgV>0?c.v/avgV:0;
+   var rng=(orH-orL)/c.c*100,body=(c.h-c.l)>0?Math.abs(c.c-c.o)/(c.h-c.l):0;
+   var br=breadth?breadth(c.t):0;
+   var okV=dir===1?c.c>vw[i]:c.c<vw[i],okB=dir===1?br>0:br<0,okR=rng>=P.minRange&&rng<=P.maxRange;
+   if(K){K.n++;if(!okV)K.v++;if(!okB)K.b++;if(!okR)K.r++}
+   if(!(okV&&okB&&okR))return null;
+   var s1=Math.min(vr,4)/4*3,s2=body*2,s3=Math.min(Math.abs(br)/0.5,1)*2,s4=Math.min(Math.abs(c.c-vw[i])/(orH-orL),1),s5=(rng>=0.5&&rng<=1.2)?1:0.5,s6=c.t<='10:15'?1:0;
+   var score=s1+s2+s3+s4+s5+s6;
+   return {i:i,t:c.t,dir:dir,orH:orH,orL:orL,close:c.c,vr:vr,body:body,br:br,rng:rng,score:score,
+    reasons:['Volume '+f2(vr)+'x','Candle body '+Math.round(body*100)+'%','Market '+(br>0?'upar ':'neeche ')+f2(br)+'%','VWAP ke '+(dir>0?'upar':'neeche'),'Range '+f2(rng)+'%']};
+  }
+  cumV+=c.v;
+ }
+ return null;
+}
+function simulate(cs,tr,P){
+ var j=tr.i+1;if(j>=cs.length)return null;
+ var entry=cs[j].o,dir=tr.dir,sl=dir>0?tr.orL:tr.orH,R=(entry-sl)*dir;
+ if(R<=0)return null;
+ var rp=R/entry*100;if(rp>P.maxRisk||rp<P.minRisk)return null;
+ var tgt=entry+dir*2*R,res=null,exitT='',lastC=entry;
+ for(var k=j;k<cs.length;k++){
+  var c=cs[k];if(c.t>P.exitT)break;
+  var hs=dir>0?c.l<=sl:c.h>=sl,ht=dir>0?c.h>=tgt:c.l<=tgt;
+  lastC=c.c;exitT=c.t;
+  if(hs){res=-1;break}
+  if(ht){res=2;break}
+ }
+ if(res===null)res=(lastC-entry)*dir/R;
+ var costR=P.cost/rp;
+ return {gross:res,costR:costR,net:res-costR,entry:entry,sl:sl,tgt:tgt,R:R,rp:rp,entryT:cs[j].t,exitT:exitT};
+}
+function pick(cands,P){
+ cands.sort(function(a,b){return a.tr.t<b.tr.t?-1:(a.tr.t>b.tr.t?1:b.tr.score-a.tr.score)});
+ var out=[];
+ for(var i=0;i<cands.length&&out.length<P.maxSig;i++){var c=cands[i];if(c.tr.score>=P.minScore&&c.tr.vr>=P.minVol)out.push(c)}
+ return out;
+}
+function breadthMaker(map,date){
+ var tm={};
+ Object.keys(map).forEach(function(sym){
+  var cs=map[sym][date];if(!cs)return;
+  var o=cs[0].o;
+  cs.forEach(function(c){var x=tm[c.t]=tm[c.t]||{s:0,n:0};x.s+=(c.c/o-1)*100;x.n++});
+ });
+ return function(t){var x=tm[t];return x&&x.n>=3?x.s/x.n:0};
+}
+function stats(tr){
+ var n=tr.length;if(!n)return {n:0};
+ var sum=0,w=0,gw=0,gl=0,cum=0,pk=0,dd=0,mon={};
+ tr.forEach(function(x){sum+=x.net;if(x.net>0){w++;gw+=x.net}else gl-=x.net;cum+=x.net;if(cum>pk)pk=cum;if(pk-cum>dd)dd=pk-cum;var m=x.date.slice(0,7);mon[m]=(mon[m]||0)+x.net});
+ var means=[];
+ for(var b=0;b<1000;b++){var s=0;for(var i=0;i<n;i++)s+=tr[Math.floor(Math.random()*n)].net;means.push(s/n)}
+ means.sort(function(a,b){return a-b});
+ var ms=Object.keys(mon),neg=ms.filter(function(m){return mon[m]<0}).length;
+ return {n:n,win:w/n*100,avg:sum/n,sum:sum,pf:gl>0?gw/gl:99,dd:dd,months:mon,negM:neg,nM:ms.length,p5:means[50]};
+}
+function verdict(s){
+ if(!s.n||s.n<60)return {k:'po',t:'Data kam ('+(s.n||0)+' trade). 60 se zyada chahiye, tab hi koi nateeja maano.'};
+ if(s.avg>=0.1&&s.p5>0)return {k:'pg',t:'Edge dikhta hai (kharche ke baad plus, aur andaaza 90% bharose se plus). Phir bhi pehle paper trade karo.'};
+ if(s.avg>0)return {k:'po',t:'Kamzor edge: average plus hai par kismat ki gunjaish bahut hai. Paise mat lagao.'};
+ return {k:'pr',t:'Edge nahi dikhta. Is rule se paisa banne ka saboot nahi mila.'};
+}
+function fmtStats(s){
+ if(!s.n)return 'Koi trade nahi bana.';
+ return 'Trade: '+s.n+'\nWin rate: '+f2(s.win)+'%\nAverage (kharche ke baad): '+(s.avg>=0?'+':'')+f2(s.avg)+'R\nKul: '+(s.sum>=0?'+':'')+f2(s.sum)+'R\nProfit factor: '+f2(s.pf)+'\nSabse bada girna: '+f2(s.dd)+'R\nNegative mahine: '+s.negM+'/'+s.nM+'\n90% andaaza (neeche ka): '+(s.p5>=0?'+':'')+f2(s.p5)+'R';
+}
+
+/* ---------- backtest ---------- */
+function prep(data,P){
+ var dates={};
+ Object.keys(data).forEach(function(s){Object.keys(data[s]).forEach(function(d){dates[d]=1})});
+ var ds=Object.keys(dates).sort(),out={},K={n:0,v:0,b:0,r:0,s:0,ok:0};
+ ds.forEach(function(d){
+  var br=breadthMaker(data,d),arr=[];
+  Object.keys(data).forEach(function(s){
+   var cs=data[s][d];if(!cs)return;
+   var tr=detect(cs,P,br,K);if(!tr)return;
+   var sim=simulate(cs,tr,P);if(!sim){K.s++;return}
+   K.ok++;arr.push({sym:s,tr:tr,sim:sim});
+  });
+  out[d]=arr;
+ });
+ return {ds:ds,cands:out,K:K};
+}
+function evalCfg(pr,days,P){
+ var tr=[];
+ days.forEach(function(d){
+  pick(pr.cands[d].slice(),P).forEach(function(c){tr.push({date:d,sym:c.sym,net:c.sim.net,gross:c.sim.gross})});
+ });
+ return tr;
+}
+function walkForward(pr,P){
+ var ds=pr.ds,cut=Math.floor(ds.length*0.6),a=ds.slice(0,cut),b=ds.slice(cut),best=null;
+ [1,1.5,2].forEach(function(v){[3,4,5,6].forEach(function(sc){
+  var Q=Object.assign({},P,{minVol:v,minScore:sc}),s=stats(evalCfg(pr,a,Q));
+  var key=(s.n>=20?s.avg:-9);
+  if(!best||key>best.key)best={key:key,v:v,sc:sc,s:s};
+ })});
+ var Q2=Object.assign({},P,{minVol:best.v,minScore:best.sc});
+ return {best:best,inS:best.s,oos:stats(evalCfg(pr,b,Q2)),all:stats(evalCfg(pr,ds,Q2)),nd:ds.length,cut:cut};
+}
+async function runBt(){
+ if(S.run)return;
+ var wl=resolved(),st=$('btSt'),out=$('btOut');out.innerHTML='';
+ if(!S.jwt){st.textContent='Pehle login karo.';return}
+ if(wl.length<5){st.textContent='Kam se kam 5 stock ke token chahiye (Settings me Tokens dhundo).';return}
+ var P=cfg(),months=+$('btM').value,to=ymd(istNow()),from=addDays(to,-30*months);
+ S.run=true;S.btStop=false;$('bBt').disabled=true;
+ var data={};
+ try{
+  for(var i=0;i<wl.length;i++){
+   if(S.btStop)throw new Error('Roka gaya');
+   st.textContent='Data le raha hoon: '+wl[i].sym+' ('+(i+1)+'/'+wl.length+')';
+   try{data[wl[i].sym]=byDay(await getCandles(wl[i].token,from,to))}
+   catch(e){st.textContent='Dikkat '+wl[i].sym+': '+e.message;await sleep(900)}
+  }
+  if(Object.keys(data).length<5)throw new Error('Kaafi stock ka data nahi mila.');
+  st.textContent='Hisaab ho raha hai...';await sleep(30);
+  var pr=prep(data,P),r=walkForward(pr,P),v=verdict(r.oos);
+  var h='<div class="box"><span class="pill '+v.k+'">'+esc(v.t)+'</span></div>';
+  h+='<div class="box"><b>Pehle 60% din (setting chunne ke liye)</b><br><span class="mu">minVol '+r.best.v+'x, minScore '+r.best.sc+'</span><pre>'+esc(fmtStats(r.inS))+'</pre></div>';
+  h+='<div class="box"><b>Baaki 40% din (asli parakh, ye dekho)</b><pre>'+esc(fmtStats(r.oos))+'</pre></div>';
+  var K=pr.K;h+='<div class="box mu"><b>Filter ka hisaab:</b> '+K.n+' breakout bane. VWAP se hate '+K.v+', market ki disha se hate '+K.b+', range se hate '+K.r+' (ek breakout ke ek se zyada kaaran ho sakte hain), risk size se hate '+K.s+'. Bache '+K.ok+'.<br>Bahut kam bache to Settings me range ki seema (min/max %) badal kar dekho.</div>';
+  h+='<div class="mu">'+r.nd+' trading din, kharcha '+P.cost+'%. Entry = trigger ke agle candle ka open. Dono SL aur target ek hi candle me hon to SL maana gaya.</div>';
+  out.innerHTML=h;st.textContent='Ho gaya.';
+ }catch(e){st.textContent='Rukk gaya: '+e.message}
+ S.run=false;$('bBt').disabled=false;
+}
+
+/* ---------- live ---------- */
+function today(){var t=ld('sig_today',null),d=ymd(istNow());if(!t||t.date!==d){t={date:d,sigs:[],emitted:[]};sv('sig_today',t)}return t}
+function completeOnly(cs,nowT){return cs.filter(function(c){return addMin(c.t,5)<=nowT})}
+function scanData(todayData,nowT,P,T){
+ var syms=Object.keys(todayData),map={};
+ syms.forEach(function(s){var m={};m[T.date]=completeOnly(todayData[s],nowT);map[s]=m});
+ var br=breadthMaker(map,T.date),sigs=[],watch=[];
+ syms.forEach(function(s){
+  var cs=map[s][T.date];if(!cs||cs.length<P.orMin/5+1)return;
+  var tr=detect(cs,P,br);
+  if(!tr){
+   var nOR=P.orMin/5,hi=-1e18,lo=1e18;
+   for(var i=0;i<nOR;i++){hi=Math.max(hi,cs[i].h);lo=Math.min(lo,cs[i].l)}
+   var last=cs[cs.length-1],d=Math.min((hi-last.c)/last.c*100,(last.c-lo)/last.c*100);
+   if(last.c<=hi&&last.c>=lo)watch.push({sym:s,d:d,dir:(hi-last.c)<(last.c-lo)?'upar':'neeche'});
+   return;
+  }
+  var last2=cs[cs.length-1],sl=tr.dir>0?tr.orL:tr.orH,R=Math.abs(tr.close-sl);
+  var fresh=tr.i>=cs.length-2&&Math.abs(last2.c-tr.close)<=0.5*R;
+  if(!fresh||T.emitted.indexOf(s)>=0)return;
+  if(tr.score<P.minScore||tr.vr<P.minVol)return;
+  var rp=R/tr.close*100;if(rp>P.maxRisk||rp<P.minRisk)return;
+  sigs.push({sym:s,tr:tr,sl:sl,R:R});
+ });
+ sigs.sort(function(a,b){return b.tr.score-a.tr.score});
+ watch.sort(function(a,b){return a.d-b.d});
+ return {sigs:sigs,watch:watch.slice(0,5)};
+}
+function makeSignal(x,token,P){
+ var dir=x.tr.dir,e=x.tr.close,tgt=e+dir*2*x.R,risk=P.cap*P.riskPct/100,qty=Math.floor(risk/x.R);
+ return {id:Date.now()+'-'+x.sym,date:ymd(istNow()),sym:x.sym,token:token,dir:dir,t:x.tr.t,i:x.tr.i,entry:e,sl:x.sl,tgt:tgt,R:x.R,qty:qty,score:x.tr.score,reasons:x.tr.reasons,orH:x.tr.orH,orL:x.tr.orL,taken:null,res:null};
+}
+function beep(){try{var a=new (window.AudioContext||window.webkitAudioContext)(),o=a.createOscillator(),g=a.createGain();o.frequency.value=880;g.gain.value=0.2;o.connect(g);g.connect(a.destination);o.start();setTimeout(function(){o.stop();a.close()},400)}catch(e){}try{navigator.vibrate&&navigator.vibrate([200,100,200])}catch(e){}}
+function renderSigs(T,watch){
+ var h='';
+ T.sigs.forEach(function(s){
+  var buy=s.dir>0;
+  h+='<div class="box '+(buy?'buy':'sell')+'"><b>'+(buy?'BUY (Long)':'SELL (Short)')+' '+esc(s.sym)+'</b> <span class="pill po">Score '+f2(s.score)+'/10</span><br>'+
+   '<span class="mu">Trigger '+s.t+' ke candle par</span><pre>Entry (abhi ke aas-paas): '+f2(s.entry)+'\nStop-loss: '+f2(s.sl)+'\nTarget (2x): '+f2(s.tgt)+'\nRisk: '+f2(s.R)+' per share\nQuantity: '+s.qty+'  (risk ₹'+Math.round(s.qty*s.R)+')\nKaaran: '+esc(s.reasons.join(', '))+'</pre>'+
+   '<div class="mu">Broker app me <b>'+esc(s.sym)+'</b> ka bhav check karo. Agar alag dikhe to trade mat lo.</div>'+
+   (s.taken===null?'<button data-take="'+s.id+'">Maine liya</button><button class="s" data-skip="'+s.id+'">Chhod diya</button>':'<span class="mu">'+(s.taken?'Liya hua':'Chhoda')+'</span>')+'</div>';
+ });
+ if(!T.sigs.length)h='<div class="mu">Abhi koi signal nahi. (Aaj '+T.sigs.length+'/'+cfg().maxSig+')</div>';
+ $('sigs').innerHTML=h;
+ $('watch').innerHTML=watch&&watch.length?'<b>Nazar me (range ke andar, breakout ke paas):</b> '+watch.map(function(w){return esc(w.sym)+' ('+w.dir+' '+f2(w.d)+'%)'}).join(', '):'';
+ Array.prototype.forEach.call($('sigs').querySelectorAll('[data-take],[data-skip]'),function(b){
+  b.onclick=function(){var id=b.getAttribute('data-take')||b.getAttribute('data-skip'),t=today();t.sigs.forEach(function(s){if(s.id===id)s.taken=!!b.getAttribute('data-take')});sv('sig_today',t);saveJournal(t);renderSigs(t,watch)};
+ });
+}
+function saveJournal(T){
+ var j=ld('sig_journal',[]);
+ T.sigs.forEach(function(s){var k=-1;j.forEach(function(x,i){if(x.id===s.id)k=i});if(k>=0)j[k]=Object.assign(j[k],s);else j.push(s)});
+ sv('sig_journal',j);
+}
+async function liveCycle(){
+ var P=cfg(),now=istNow(),T=today(),nowT=hm(now),dow=now.getDay();
+ if(dow===0||dow===6){$('liveSt').textContent='Aaj chhutti hai, market band.';return}
+ if(nowT<'09:35'){$('liveSt').textContent='Market 9:15 par khulta hai. Pehla scan 9:35 ke baad hoga (range 9:30 tak banti hai).';return}
+ if(nowT>'15:20'){$('liveSt').textContent='Market band ho gaya. Natija Journal me dekho.';renderSigs(T,[]);return}
+ if(T.sigs.length>=P.maxSig){$('liveSt').innerHTML='Aaj ke '+P.maxSig+' signal ho gaye. Ab koi naya signal nahi aayega.';renderSigs(T,[]);return}
+ var wl=resolved();if(wl.length<5){$('liveSt').textContent='Settings me watchlist aur tokens dekho.';return}
+ $('liveSt').textContent=nowT+' par data le raha hoon...';
+ var tdata={};
+ for(var i=0;i<wl.length;i++){
+  if(!S.run)return;
+  try{var cs=await getCandles(wl[i].token,T.date,T.date);if(cs.length)tdata[wl[i].sym]=cs}catch(e){$('liveSt').textContent='Dikkat '+wl[i].sym+': '+e.message}
+  await sleep(delay());
+ }
+ if(!Object.keys(tdata).length){$('liveSt').textContent='Aaj ka data nahi mila (market band ya login purana).';return}
+ var r=scanData(tdata,hm(istNow()),P,T),tok={};wl.forEach(function(w){tok[w.sym]=w.token});
+ for(var k=0;k<r.sigs.length&&T.sigs.length<P.maxSig;k++){
+  var s=makeSignal(r.sigs[k],tok[r.sigs[k].sym],P);T.sigs.push(s);T.emitted.push(s.sym);beep();
+  try{if(window.Notification&&Notification.permission==='granted')new Notification('Signal: '+s.sym,{body:(s.dir>0?'BUY ':'SELL ')+f2(s.entry)+' SL '+f2(s.sl)})}catch(e){}
+ }
+ sv('sig_today',T);saveJournal(T);renderSigs(T,r.watch);
+ $('liveSt').textContent=hm(istNow())+' tak scan hua. Aaj '+T.sigs.length+'/'+P.maxSig+' signal.';
+}
+function startLive(){
+ if(S.run){return}
+ if(!S.jwt){$('liveSt').textContent='Pehle login karo.';return}
+ try{window.Notification&&Notification.requestPermission&&Notification.requestPermission()}catch(e){}
+ S.run=true;$('bStart').disabled=true;
+ (async function loop(){
+  while(S.run){
+   try{await liveCycle()}catch(e){$('liveSt').textContent='Dikkat: '+e.message}
+   var n=istNow(),wait=(5-(n.getMinutes()%5))*60-n.getSeconds()+8;
+   for(var k=0;k<wait&&S.run;k++)await sleep(1000);
+  }
+  $('bStart').disabled=false;
+ })();
+}
+function stopLive(){S.run=false;$('liveSt').textContent='Scan roka.'}
+
+/* ---------- journal ---------- */
+async function evalJournal(){
+ var j=ld('sig_journal',[]),P=cfg(),st=0;
+ for(var i=0;i<j.length;i++){
+  var s=j[i];
+  if(s.res||s.date>=ymd(istNow())&&hm(istNow())<'15:20')continue;
+  try{
+   var cs=byDay(await getCandles(s.token,s.date,s.date))[s.date];if(!cs)continue;
+   var idx=-1;cs.forEach(function(c,k){if(c.t===s.t)idx=k});if(idx<0)continue;
+   var r=simulate(cs,{i:idx,dir:s.dir,orH:s.orH,orL:s.orL},P);
+   s.res=r?{net:r.net,gross:r.gross,exit:r.exitT}:{net:0,gross:0,exit:'-',skip:true};st++;
+  }catch(e){$('jOut').textContent='Dikkat: '+e.message;break}
+ }
+ sv('sig_journal',j);renderJournal();
+}
+function renderJournal(){
+ var j=ld('sig_journal',[]).slice().reverse(),done=j.filter(function(s){return s.res&&!s.res.skip});
+ var st=stats(done.map(function(s){return {date:s.date,net:s.res.net}}));
+ var h='<div class="box"><pre>'+esc(done.length?fmtStats(st):'Abhi koi natija nahi. Din ke baad "Natija nikaalo" dabao.')+'</pre></div>';
+ j.slice(0,30).forEach(function(s){
+  h+='<div class="box"><b>'+s.date+' '+(s.dir>0?'BUY':'SELL')+' '+esc(s.sym)+'</b> <span class="mu">'+(s.taken===true?'liya':(s.taken===false?'chhoda':'-'))+'</span><br>'+
+   (s.res?'<span class="'+(s.res.net>0?'g':'r')+'">'+(s.res.net>=0?'+':'')+f2(s.res.net)+'R</span> (gross '+f2(s.res.gross)+'R, exit '+s.res.exit+')':'<span class="mu">natija baaki</span>')+'</div>';
+ });
+ $('jOut').innerHTML=h;
+}
+
+/* ---------- init ---------- */
+function loadUi(){
+ var c=cfg();
+ $('cap').value=c.cap;$('riskPct').value=c.riskPct;$('cost').value=c.cost;$('maxSig').value=c.maxSig;$('minVol').value=c.minVol;$('minScore').value=c.minScore;$('minRange').value=c.minRange;$('maxRange').value=c.maxRange;
+ $('wl').value=ld('sig_wl',DEF_WL);
+ $('apiKey').value=ld('sig_key','');$('client').value=ld('sig_client','');
+ try{var j=JSON.parse(sessionStorage.getItem('sig_jwt'));if(j&&j.d===ymd(istNow())){S.jwt=j.t;$('loginSt').innerHTML='<span class="g">Aaj ka login chalu hai.</span>'}}catch(e){}
+ reportTokens();renderJournal();renderSigs(today(),[]);
+}
+function saveCfg(){
+ var c=cfg();
+ c.cap=+$('cap').value||c.cap;c.riskPct=+$('riskPct').value||c.riskPct;c.cost=+$('cost').value||c.cost;
+ c.maxSig=Math.max(1,Math.min(2,+$('maxSig').value||2));c.minVol=+$('minVol').value||c.minVol;c.minScore=+$('minScore').value||c.minScore;c.minRange=+$('minRange').value||c.minRange;c.maxRange=+$('maxRange').value||c.maxRange;
+ sv('sig_cfg',c);sv('sig_wl',$('wl').value);reportTokens();
+ $('tokSt').innerHTML+=' <span class="g">Save ho gaya.</span>';
+}
+$('bLogin').onclick=login;
+$('bLogout').onclick=function(){S.jwt='';try{sessionStorage.removeItem('sig_jwt')}catch(e){}$('loginSt').textContent='Logout ho gaya.'};
+$('bTok').onclick=findTokens;$('bSave').onclick=saveCfg;
+$('bStart').onclick=startLive;$('bStop').onclick=stopLive;
+$('bBt').onclick=runBt;$('bBtStop').onclick=function(){S.btStop=true};
+$('bEval').onclick=evalJournal;
+$('bClr').onclick=function(){if(confirm('Journal saaf karein?')){sv('sig_journal',[]);renderJournal()}};
+loadUi();
+window.SIG={detect:detect,simulate:simulate,pick:pick,stats:stats,verdict:verdict,prep:prep,walkForward:walkForward,scanData:scanData,breadthMaker:breadthMaker,cfg:cfg,byDay:byDay,chunks:chunks,parseRows:parseRows,S:S,login:login,findTokens:findTokens,runBt:runBt,liveCycle:liveCycle,makeSignal:makeSignal,today:today};
+})();
+</script>
+</body>
+</html>
