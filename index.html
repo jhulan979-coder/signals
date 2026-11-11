@@ -178,17 +178,30 @@ function parseWL(){
  return $('wl').value.split(/[\s,]+/).filter(Boolean).map(function(x){var p=x.toUpperCase().split(':');return {sym:p[0],token:p[1]||''}});
 }
 async function findTokens(){
- var st=$('tokSt');st.textContent='Instrument list download ho rahi hai (badi file hai, thoda ruko)...';
- var urls=['https://margincalculator.angelone.in/OpenAPI_File/files/OpenAPIScripMaster.json','https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json'];
- var list=null;
- for(var i=0;i<urls.length&&!list;i++){
-  try{var r=await http('GET',urls[i],{},null);if(Array.isArray(r.json))list=r.json}catch(e){}
+ var st=$('tokSt'),map=ld('sig_tokens',{}),wl=parseWL();
+ var todo=wl.filter(function(w){return !w.token&&!map[w.sym]}),bad=[];
+ if(!todo.length){reportTokens();return}
+ if(!S.jwt){st.innerHTML='<span class="r">Pehle login karo. Token dhundne ke liye login zaroori hai.</span>';return}
+ $('bTok').disabled=true;
+ for(var i=0;i<todo.length;i++){
+  var w=todo[i],found=null,err='',qs=[w.sym+'-EQ',w.sym];
+  st.textContent='Token dhundh raha hoon: '+w.sym+' ('+(i+1)+'/'+todo.length+')';
+  for(var q=0;q<qs.length&&!found;q++){
+   try{
+    var j=await api('/rest/secure/angelbroking/order/v1/searchScrip',{exchange:'NSE',searchscrip:qs[q]},true);
+    var d=j.data||[];
+    for(var k=0;k<d.length;k++){
+     var ts=String(d[k].tradingsymbol||d[k].symbol||'').toUpperCase();
+     if(ts===w.sym+'-EQ'){found=String(d[k].symboltoken||d[k].token);break}
+    }
+   }catch(e){err=e.message}
+   await sleep(delay());
+  }
+  if(found){map[w.sym]=found;sv('sig_tokens',map)}else bad.push(w.sym+(err?' ('+err+')':''));
  }
- if(!list){st.innerHTML='<span class="r">List nahi mili. NAAM:TOKEN likh kar khud token daal sakte ho.</span>';return}
- var map={};
- list.forEach(function(x){if(x.exch_seg==='NSE'&&/-EQ$/.test(x.symbol))map[x.symbol.replace(/-EQ$/,'')]=x.token});
- sv('sig_tokens',map);
+ $('bTok').disabled=false;
  reportTokens();
+ if(bad.length)$('tokSt').innerHTML+='<br><span class="mu">Detail: '+esc(bad.join('; '))+'</span>';
 }
 function reportTokens(){
  var map=ld('sig_tokens',{}),wl=parseWL(),miss=[];
