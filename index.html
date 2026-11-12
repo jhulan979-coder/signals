@@ -3,19 +3,22 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Intraday Signals (personal)</title>
+<title>Market Scanner (personal)</title>
 <style>
 :root{--bg:#101316;--card:#1a1f24;--line:#2c343c;--tx:#eceff1;--mu:#9aa7b0;--sf:#ff9933;--g:#3ddc84;--r:#ff5252}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.45 system-ui,sans-serif;padding:12px;max-width:560px;margin:auto}
-h1{font-size:20px;margin:6px 0 2px}
-.sub{color:var(--mu);font-size:12.5px;margin-bottom:10px}
-details{background:var(--card);border:1px solid var(--line);border-radius:14px;margin:10px 0;padding:0 12px}
-summary{padding:13px 0;font-weight:700;cursor:pointer}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.45 system-ui,sans-serif;padding:10px;max-width:600px;margin:auto}
+h1{font-size:19px;margin:4px 0 2px}
+.sub{color:var(--mu);font-size:12px;margin-bottom:8px}
+.tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;position:sticky;top:0;background:var(--bg);z-index:5}
+.tab{flex:0 0 auto;background:#2b333b;color:var(--tx);border:0;border-radius:20px;padding:8px 14px;font:inherit;font-weight:700;margin:0}
+.tab.on{background:var(--sf);color:#1a1100}
+.sec{display:none}.sec.on{display:block}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;margin:10px 0;padding:10px 12px}
 label{display:block;font-size:12.5px;color:var(--mu);margin:10px 0 3px}
 input,select,textarea{width:100%;background:#0f1215;color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:10px;font:inherit}
 textarea{min-height:70px}
-button{background:var(--sf);color:#1a1100;border:0;border-radius:10px;padding:11px 14px;font:inherit;font-weight:700;margin:8px 6px 8px 0}
+button{background:var(--sf);color:#1a1100;border:0;border-radius:10px;padding:10px 14px;font:inherit;font-weight:700;margin:8px 6px 8px 0}
 button.s{background:#2b333b;color:var(--tx)}
 button:disabled{opacity:.5}
 .row{display:flex;gap:8px}.row>*{flex:1}
@@ -27,64 +30,118 @@ button:disabled{opacity:.5}
 .warn{background:#3a2a10;border:1px solid #6b4a14;border-radius:10px;padding:9px;font-size:12.5px;margin:8px 0}
 pre{white-space:pre-wrap;margin:0;font:12.5px/1.5 ui-monospace,monospace}
 .g{color:var(--g)}.r{color:var(--r)}
+.idx{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ic{background:#12171b;border:1px solid var(--line);border-radius:12px;padding:8px 10px}
+.ic b{font-size:13px}.ic .v{font-size:17px;font-weight:700}
+.bar{height:6px;background:#2b333b;border-radius:4px;position:relative;margin-top:6px}
+.bar i{position:absolute;top:-3px;width:4px;height:12px;background:var(--sf);border-radius:2px}
+.mr{display:flex;justify-content:space-between;align-items:center;padding:9px 6px;border-bottom:1px solid var(--line);cursor:pointer}
+.mr .mn{flex:1}.mr .mp{text-align:right;min-width:90px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{background:#2b333b;border:0;border-radius:16px;padding:6px 11px;font:inherit;font-size:13px;color:var(--tx);margin:0}
+.chip.on{background:var(--sf);color:#1a1100;font-weight:700}
+.bb{display:flex;height:10px;border-radius:5px;overflow:hidden;margin:6px 0}
 </style>
 </head>
 <body>
-<h1>📊 Intraday Signals</h1>
-<div class="sub">Sirf personal use. Din me zyada se zyada 2 signal. Ye salah nahi hai, pehle backtest aur paper trade dekho.</div>
+<h1>📈 Market Scanner</h1>
+<div class="sub">Sirf personal use. Salah nahi. Din me zyada se zyada 2 signal.</div>
+<div class="tabs" id="tabs">
+ <button class="tab on" data-tab="tMarket">Market</button>
+ <button class="tab" data-tab="tSig">Signal</button>
+ <button class="tab" data-tab="tBt">Backtest</button>
+ <button class="tab" data-tab="tJ">Journal</button>
+ <button class="tab" data-tab="tSet">Settings</button>
+</div>
 
-<details open id="dLogin"><summary>1. Angel One login</summary>
-<div class="warn">Keys sirf is browser me rehti hain. Kisi ko mat bhejna, kisi aur site par mat daalna. PIN aur TOTP save nahi hote.</div>
-<label>API key (SmartAPI)</label><input id="apiKey" autocomplete="off">
-<label>Client code</label><input id="client" autocomplete="off">
-<label>PIN (Angel One account ka)</label><input id="pin" type="password" autocomplete="off">
-<label>TOTP (6 digit, abhi ka)</label><input id="totp" inputmode="numeric" maxlength="6" autocomplete="off">
-<button id="bLogin">Login karo</button><button class="s" id="bLogout">Logout</button>
-<div id="loginSt" class="mu"></div>
-</details>
+<div class="sec on" id="tMarket">
+ <div id="loginBanner" class="warn">Login nahi hai. <b>Settings</b> tab me jaakar Angel One se login karo.</div>
+ <div class="row"><button id="bRef">Abhi refresh</button><button class="s" id="bAuto">Auto refresh: band</button></div>
+ <div id="mSt" class="mu"></div>
+ <div class="card"><b>Index</b><div class="idx" id="mIdx"></div></div>
+ <div class="card"><b>Poore market ka haal</b><div id="mBr"></div></div>
+ <div class="card">
+  <input id="mq" placeholder="Stock dhundo (naam)">
+  <div class="chips" id="mf" style="margin-top:8px"></div>
+  <label>Kaise lagao</label>
+  <select id="ms"><option value="pct">Sabse zyada badhe</option><option value="npct">Sabse zyada gire</option><option value="pos">Din ki high ke paas</option><option value="neg">Din ki low ke paas</option><option value="vol">Volume (zyada)</option><option value="name">Naam (A-Z)</option></select>
+  <div id="mList"></div>
+  <button class="s" id="bMore">Aur dikhao</button>
+ </div>
+ <div class="card" id="mDetC" style="display:none"><div id="mDet"></div></div>
+</div>
 
-<details id="dSet"><summary>2. Settings aur watchlist</summary>
-<label>Watchlist (naam, comma ya space se; token pata ho to NAAM:TOKEN)</label>
-<textarea id="wl"></textarea>
-<button class="s" id="bTok">Tokens dhundo</button><div id="tokSt" class="mu"></div>
-<div class="row"><div><label>Capital (₹)</label><input id="cap" type="number"></div><div><label>Risk har trade par (%)</label><input id="riskPct" type="number" step="0.1"></div></div>
-<div class="row"><div><label>Kharcha, aana-jaana (% price ka)</label><input id="cost" type="number" step="0.01"></div><div><label>Din me max signal</label><input id="maxSig" type="number" min="1" max="2"></div></div>
-<div class="row"><div><label>Opening range min (%)</label><input id="minRange" type="number" step="0.05"></div><div><label>Opening range max (%)</label><input id="maxRange" type="number" step="0.05"></div></div>
-<div class="row"><div><label>Kam se kam volume (x)</label><input id="minVol" type="number" step="0.1"></div><div><label>Kam se kam score (10 me)</label><input id="minScore" type="number" step="0.5"></div></div>
-<button id="bSave">Settings save karo</button>
-<div class="mu">Rule: pehle 15 min ki range (9:15-9:30) toote, volume badha ho, VWAP aur market ki disha ke saath. Stop = range ka doosra kinara, target = 2x risk, 3:15 par band.</div>
-</details>
+<div class="sec" id="tSig">
+ <div class="row"><button id="bStart">Scan shuru</button><button class="s" id="bStop">Ruko</button></div>
+ <div id="liveSt" class="mu"></div>
+ <div id="sigs"></div>
+ <div id="watch" class="mu"></div>
+ <div class="mu" style="margin-top:8px">Scanner pehle poore market ko dekhta hai (jitne stock ke token save hain + index), kam turnover aur circuit ke paas wale stock hata deta hai, phir din ki high/low ke paas ke ~25 stock ke 5-min candle jaanchta hai (API ki limit ke liye). Small cap me nikalna mushkil ho sakta hai, isliye turnover ki seema Settings me rakhi hai.</div>
+</div>
 
-<details open id="dLive"><summary>3. Live signal</summary>
-<div class="row"><button id="bStart">Scan shuru</button><button class="s" id="bStop">Ruko</button></div>
-<div id="liveSt" class="mu"></div>
-<div id="sigs"></div>
-<div id="watch" class="mu"></div>
-</details>
+<div class="sec" id="tBt">
+ <div class="card">
+ <div class="row"><div><label>Kitne mahine</label><select id="btM"><option>3</option><option>6</option></select></div><div><label>Kaun se stock</label><select id="btU"><option value="wl">Meri watchlist</option><option value="60">Market list ke pehle 60</option><option value="120">Market list ke pehle 120</option></select></div></div>
+ <button id="bBt">Backtest chalao</button><button class="s" id="bBtStop">Roko</button>
+ <div id="btSt" class="mu"></div><div id="btOut"></div>
+ </div>
+</div>
 
-<details id="dBt"><summary>4. Backtest (purane data par)</summary>
-<div class="row"><div><label>Kitne mahine</label><select id="btM"><option>3</option><option>6</option></select></div></div>
-<button id="bBt">Backtest chalao</button><button class="s" id="bBtStop">Roko</button>
-<div id="btSt" class="mu"></div><div id="btOut"></div>
-</details>
+<div class="sec" id="tJ">
+ <div class="card">
+ <button class="s" id="bEval">Natija nikaalo</button><button class="s" id="bClr">Journal saaf</button>
+ <div id="jOut"></div>
+ </div>
+</div>
 
-<details id="dJ"><summary>5. Journal (paper trade)</summary>
-<button class="s" id="bEval">Natija nikaalo</button><button class="s" id="bClr">Journal saaf</button>
-<div id="jOut"></div>
-</details>
+<div class="sec" id="tSet">
+ <div class="card"><b>1. Angel One login</b>
+ <div class="warn">Keys sirf is browser me rehti hain. Kisi ko mat bhejna. PIN aur TOTP save nahi hote.</div>
+ <label>API key (SmartAPI)</label><input id="apiKey" autocomplete="off">
+ <label>Client code</label><input id="client" autocomplete="off">
+ <label>PIN (Angel One account ka)</label><input id="pin" type="password" autocomplete="off">
+ <label>TOTP (6 digit, abhi ka)</label><input id="totp" inputmode="numeric" maxlength="6" autocomplete="off">
+ <button id="bLogin">Login karo</button><button class="s" id="bLogout">Logout</button>
+ <div id="loginSt" class="mu"></div>
+ </div>
+ <div class="card"><b>2. Market list ke token (ek baar)</b>
+ <div class="mu">Login ke baad dabao. ~200 stock aur index ke token Angel One se dhundh kar phone me save ho jate hain (2-3 minute lagte hain).</div>
+ <button id="bUni">Pehle 200 bade stock + index</button>
+ <button id="bDisc">Poora market dhundo (sab size)</button><button class="s" id="bUniStop">Roko</button>
+ <div id="uniSt" class="mu"></div>
+ <div class="mu">"Poora market" Angel One ki search se A-Z ke har combination dhundh kar NSE ke sabhi stock (large, mid, small) ke token jama karta hai. 10-15 minute lag sakte hain, beech me roko to aage se jaari rakh sakte ho. Phone me save rehta hai.</div>
+ </div>
+ <div class="card"><b>3. Backtest watchlist aur settings</b>
+ <label>Watchlist (naam, comma ya space se; token pata ho to NAAM:TOKEN)</label>
+ <textarea id="wl"></textarea>
+ <button class="s" id="bTok">Watchlist ke token dhundo</button><div id="tokSt" class="mu"></div>
+ <div class="row"><div><label>Capital (₹)</label><input id="cap" type="number"></div><div><label>Risk har trade par (%)</label><input id="riskPct" type="number" step="0.1"></div></div>
+ <div class="row"><div><label>Kharcha, aana-jaana (% price ka)</label><input id="cost" type="number" step="0.01"></div><div><label>Din me max signal</label><input id="maxSig" type="number" min="1" max="2"></div></div>
+ <div class="row"><div><label>Opening range min (%)</label><input id="minRange" type="number" step="0.05"></div><div><label>Opening range max (%)</label><input id="maxRange" type="number" step="0.05"></div></div>
+ <div class="row"><div><label>Kam se kam turnover (₹ crore)</label><input id="minTurn" type="number" step="1"></div><div><label>Kam se kam bhav (₹)</label><input id="minPrice" type="number" step="1"></div></div>
+ <div class="row"><div><label>Kam se kam volume (x)</label><input id="minVol" type="number" step="0.1"></div><div><label>Kam se kam score (10 me)</label><input id="minScore" type="number" step="0.5"></div></div>
+ <button id="bSave">Settings save karo</button>
+ <div class="mu">Rule: pehle 15 min ki range (9:15-9:30) toote, volume badha ho, VWAP aur market ki disha ke saath. Stop = range ka doosra kinara, target = 2x risk, 3:15 par band.</div>
+ </div>
+</div>
 
 <script>
 (function(){
 'use strict';
 var $=function(id){return document.getElementById(id)};
 var BASE='https://apiconnect.angelbroking.com';
+var UNI='RELIANCE TCS HDFCBANK ICICIBANK INFY HINDUNILVR ITC SBIN BHARTIARTL KOTAKBANK LT AXISBANK BAJFINANCE ASIANPAINT MARUTI SUNPHARMA HCLTECH TITAN ULTRACEMCO WIPRO NTPC ONGC POWERGRID M&M TATASTEEL JSWSTEEL ADANIENT ADANIPORTS COALINDIA TECHM NESTLEIND BAJAJFINSV GRASIM HINDALCO INDUSINDBK CIPLA DRREDDY EICHERMOT BPCL BRITANNIA DIVISLAB APOLLOHOSP HEROMOTOCO TATACONSUM SBILIFE HDFCLIFE BAJAJ-AUTO SHRIRAMFIN TRENT BEL ETERNAL JIOFIN ADANIGREEN ADANIPOWER AMBUJACEM BANKBARODA BERGEPAINT BOSCHLTD CANBK CHOLAFIN COLPAL DLF DABUR GAIL GODREJCP HAVELLS HAL ICICIGI ICICIPRULI INDIGO IOC IRCTC JINDALSTEL LICI LODHA MARICO MUTHOOTFIN NAUKRI PIDILITIND PNB PFC RECLTD SBICARD SHREECEM SIEMENS SRF TATAPOWER TORNTPHARM TVSMOTOR UNIONBANK VEDL VBL YESBANK ABB ACC APLAPOLLO ASHOKLEY ASTRAL AUBANK AUROPHARMA BALKRISIND BANDHANBNK BHARATFORG BHEL BIOCON BSE CGPOWER COFORGE CONCOR CUMMINSIND DIXON ESCORTS EXIDEIND FEDERALBNK GLENMARK GMRAIRPORT HDFCAMC HINDPETRO IDFCFIRSTB IGL INDHOTEL INDUSTOWER IPCALAB JUBLFOOD KALYANKJIL KPITTECH LAURUSLABS LICHSGFIN LUPIN MANAPPURAM MAXHEALTH MFSL MPHASIS MRF NMDC OBEROIRLTY OFSS OIL PAGEIND PERSISTENT PETRONET PIIND POLYCAB PRESTIGE RVNL SAIL SOLARINDS SUPREMEIND SUZLON SYNGENE TATACHEM TATACOMM TATAELXSI TIINDIA TORNTPOWER UPL UNOMINDA VOLTAS ZYDUSLIFE ANGELONE CDSL CROMPTON DEEPAKNTR DELHIVERY GODREJPROP HUDCO IEX IRFC JSWENERGY LTF MOTHERSON NHPC NYKAA PHOENIXLTD POLICYBZR POONAWALLA RBLBANK SJVN SONACOMS TITAGARH'.split(' ');
+var IDX=[['Nifty 50',['NIFTY 50','NIFTY'],'99926000'],['Bank Nifty',['NIFTY BANK','BANKNIFTY'],'99926009'],['Fin Nifty',['NIFTY FIN SERVICE','FINNIFTY'],'99926037'],['Midcap Select',['NIFTY MID SELECT','MIDCPNIFTY'],'99926074'],['Nifty IT',['NIFTY IT'],''],['India VIX',['INDIA VIX'],'99926017']];
 var DEF_WL='RELIANCE HDFCBANK ICICIBANK INFY TCS SBIN AXISBANK KOTAKBANK LT ITC BHARTIARTL TATASTEEL MARUTI SUNPHARMA BAJFINANCE HINDUNILVR NTPC ONGC POWERGRID M&M';
-var DEF={cap:100000,riskPct:0.5,cost:0.10,maxSig:2,minVol:1.5,minScore:5,orMin:15,lastEntry:'10:55',exitT:'15:10',minRange:0.3,maxRange:1.5,minRisk:0.25,maxRisk:1.0};
-var S={jwt:'',pubIp:'',data:{},run:false,btStop:false,tm:null};
+var DEF={cap:100000,riskPct:0.5,cost:0.10,maxSig:2,minVol:1.5,minScore:5,orMin:15,lastEntry:'10:55',exitT:'15:10',minRange:0.3,maxRange:1.5,minRisk:0.25,maxRisk:1.0,minTurn:5,minPrice:20};
+var S={jwt:'',pubIp:'',run:false,btStop:false,uniStop:false,auto:false};
+var M={snap:{},names:{},idx:{},t:0,busy:false,filter:'all',limit:60,sel:''};
 function ld(k,d){try{var v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(e){return d}}
 function sv(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
 function sleep(ms){return new Promise(function(r){setTimeout(r,ms)})}
-function delay(){return typeof window.SIG_DELAY==='number'?window.SIG_DELAY:450}
+function scale(){return typeof window.SIG_DELAY==='number'?window.SIG_DELAY/450:1}
+var LAST={};
+async function gap(k,ms){var w=(LAST[k]||0)+ms*scale()-Date.now();if(w>0)await sleep(w);LAST[k]=Date.now()}
 function f2(x){return (Math.round(x*100)/100).toFixed(2)}
 function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 function istNow(){var d=new Date();return new Date(d.getTime()+(330+d.getTimezoneOffset())*60000)}
@@ -93,8 +150,9 @@ function hm(d){return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinut
 function addDays(s,n){var d=new Date(s+'T12:00:00');d.setDate(d.getDate()+n);return ymd(d)}
 function addMin(t,m){var a=t.split(':'),x=+a[0]*60+ +a[1]+m;return String(Math.floor(x/60)).padStart(2,'0')+':'+String(x%60).padStart(2,'0')}
 function cfg(){var c=ld('sig_cfg',{});var o={};for(var k in DEF)o[k]=(c[k]!=null?c[k]:DEF[k]);return o}
+function marketOpen(){var n=istNow(),w=n.getDay(),t=hm(n);return w>0&&w<6&&t>='09:15'&&t<='15:30'}
 
-/* ---------- storage (IndexedDB cache) ---------- */
+/* ---------- cache ---------- */
 function idb(){return new Promise(function(res,rej){var r=indexedDB.open('sig',1);r.onupgradeneeded=function(){r.result.createObjectStore('c')};r.onsuccess=function(){res(r.result)};r.onerror=function(){rej(r.error)}})}
 async function idbGet(k){try{var d=await idb();return await new Promise(function(r){var q=d.transaction('c').objectStore('c').get(k);q.onsuccess=function(){r(q.result)};q.onerror=function(){r(null)}})}catch(e){return null}}
 async function idbSet(k,v){try{var d=await idb();await new Promise(function(r){var tx=d.transaction('c','readwrite');tx.objectStore('c').put(v,k);tx.oncomplete=r;tx.onerror=r})}catch(e){}}
@@ -123,14 +181,15 @@ async function api(path,body,auth){
  for(var k=0;k<4;k++){
   var r=await http('POST',BASE+path,hdr(auth),body);
   var j=r.json;
-  if(j&&j.status===true)return j;
-  var msg=(j&&(j.message||''))+' '+(j&&j.errorcode||'');
+  if(j&&(j.status===true||j.success===true))return j;
+  var msg=(j&&(j.message||''))+' '+(j&&(j.errorcode||j.errorCode)||'');
   last=new Error((msg.trim()||('HTTP '+r.status)));
-  if(/access rate|exceeding|rate limit|AB1004/i.test(msg)||r.status===429){await sleep(1500*(k+1));continue}
+  if(/access rate|exceeding|rate limit|AB1004/i.test(msg)||r.status===429){await sleep(1500*(k+1)*Math.max(scale(),0.01));continue}
   throw last;
  }
  throw last;
 }
+function setLogged(){var on=!!S.jwt;$('loginBanner').style.display=on?'none':'block'}
 async function login(){
  var key=$('apiKey').value.trim(),cl=$('client').value.trim().toUpperCase(),pin=$('pin').value.trim(),totp=$('totp').value.trim();
  if(!key||!cl||!pin||totp.length!==6){$('loginSt').textContent='API key, client code, PIN aur 6 digit TOTP bharo.';return}
@@ -142,26 +201,23 @@ async function login(){
   S.jwt=j.data.jwtToken;
   try{sessionStorage.setItem('sig_jwt',JSON.stringify({d:ymd(istNow()),t:S.jwt}))}catch(e){}
   $('pin').value='';$('totp').value='';
-  $('loginSt').innerHTML='<span class="g">Login ho gaya.</span> Ye aaj ke din ke liye chalega.';
+  $('loginSt').innerHTML='<span class="g">Login ho gaya.</span> Ye aaj ke din ke liye chalega.';setLogged();
  }catch(e){
   $('loginSt').innerHTML='<span class="r">Login nahi hua: '+esc(e.message)+'</span>';
  }
 }
 function chunks(from,to){var out=[],a=from;while(a<=to){var b=addDays(a,29);if(b>to)b=to;out.push([a,b]);a=addDays(b,1)}return out}
-function parseRows(rows){
- return (rows||[]).map(function(r){return {d:String(r[0]).slice(0,10),t:String(r[0]).slice(11,16),o:+r[1],h:+r[2],l:+r[3],c:+r[4],v:+r[5]}});
-}
+function parseRows(rows){return (rows||[]).map(function(r){return {d:String(r[0]).slice(0,10),t:String(r[0]).slice(11,16),o:+r[1],h:+r[2],l:+r[3],c:+r[4],v:+r[5]}})}
 async function getCandles(token,from,to){
- var all=[],today=ymd(istNow());
- var ch=chunks(from,to);
+ var all=[],today=ymd(istNow()),ch=chunks(from,to);
  for(var i=0;i<ch.length;i++){
   var a=ch[i][0],b=ch[i][1],key='c5|'+token+'|'+a+'|'+b,rows=null;
   if(b<today)rows=await idbGet(key);
   if(!rows){
+   await gap('c',450);
    var j=await api('/rest/secure/angelbroking/historical/v1/getCandleData',{exchange:'NSE',symboltoken:String(token),interval:'FIVE_MINUTE',fromdate:a+' 09:15',todate:b+' 15:30'},true);
    rows=j.data||[];
    if(b<today&&rows.length)await idbSet(key,rows);
-   await sleep(delay());
   }
   all=all.concat(parseRows(rows));
  }
@@ -172,36 +228,114 @@ function byDay(cs){
  Object.keys(m).forEach(function(d){m[d].sort(function(a,b){return a.t<b.t?-1:1});if(m[d].length<40)delete m[d]});
  return m;
 }
-
-/* ---------- watchlist / tokens ---------- */
-function parseWL(){
- return $('wl').value.split(/[\s,]+/).filter(Boolean).map(function(x){var p=x.toUpperCase().split(':');return {sym:p[0],token:p[1]||''}});
+async function quote(tokens){
+ await gap('q',1100);
+ var j=await api('/rest/secure/angelbroking/market/v1/quote/',{mode:'FULL',exchangeTokens:{NSE:tokens}},true);
+ return (j.data&&j.data.fetched)||[];
 }
-async function findTokens(){
- var st=$('tokSt'),map=ld('sig_tokens',{}),wl=parseWL();
- var todo=wl.filter(function(w){return !w.token&&!map[w.sym]}),bad=[];
- if(!todo.length){reportTokens();return}
- if(!S.jwt){st.innerHTML='<span class="r">Pehle login karo. Token dhundne ke liye login zaroori hai.</span>';return}
- $('bTok').disabled=true;
+
+/* ---------- tokens ---------- */
+function parseWL(){return $('wl').value.split(/[\s,]+/).filter(Boolean).map(function(x){var p=x.toUpperCase().split(':');return {sym:p[0],token:p[1]||''}})}
+async function searchTok(q){
+ var j=await api('/rest/secure/angelbroking/order/v1/searchScrip',{exchange:'NSE',searchscrip:q},true);
+ return j.data||[];
+}
+async function resolveList(list,st,stopKey){
+ var map=ld('sig_tokens',{}),todo=list.filter(function(s){return !map[s]}),bad=[];
  for(var i=0;i<todo.length;i++){
-  var w=todo[i],found=null,err='',qs=[w.sym+'-EQ',w.sym];
-  st.textContent='Token dhundh raha hoon: '+w.sym+' ('+(i+1)+'/'+todo.length+')';
+  if(S[stopKey])break;
+  var sym=todo[i],found=null,err='',qs=[sym+'-EQ',sym];
+  st.textContent='Token dhundh raha hoon: '+sym+' ('+(i+1)+'/'+todo.length+')';
   for(var q=0;q<qs.length&&!found;q++){
    try{
-    var j=await api('/rest/secure/angelbroking/order/v1/searchScrip',{exchange:'NSE',searchscrip:qs[q]},true);
-    var d=j.data||[];
+    await gap('s',450);
+    var d=await searchTok(qs[q]);
     for(var k=0;k<d.length;k++){
      var ts=String(d[k].tradingsymbol||d[k].symbol||'').toUpperCase();
-     if(ts===w.sym+'-EQ'){found=String(d[k].symboltoken||d[k].token);break}
+     if(ts===sym+'-EQ'){found=String(d[k].symboltoken||d[k].token);break}
     }
    }catch(e){err=e.message}
-   await sleep(delay());
   }
-  if(found){map[w.sym]=found;sv('sig_tokens',map)}else bad.push(w.sym+(err?' ('+err+')':''));
+  if(found)map[sym]=found;else bad.push(sym+(err?' ('+err+')':''));
+  if(i%10===9)sv('sig_tokens',map);
  }
+ sv('sig_tokens',map);
+ return bad;
+}
+async function resolveIdx(){
+ var map=ld('sig_idx',{}),guess=ld('sig_idx_guess',{});
+ for(var i=0;i<IDX.length;i++){
+  var nm=IDX[i][0],al=IDX[i][1].map(function(x){return x.replace(/\s+/g,'')}),found=null;
+  var terms=[IDX[i][1][0],nm];
+  for(var t=0;t<terms.length&&!found;t++){
+   try{
+    await gap('s',450);
+    var d=await searchTok(terms[t]);
+    for(var k=0;k<d.length;k++){
+     var ts=String(d[k].tradingsymbol||d[k].symbol||'').toUpperCase().replace(/\s+/g,'');
+     if(al.indexOf(ts)>=0){found=String(d[k].symboltoken||d[k].token);break}
+    }
+   }catch(e){}
+  }
+  if(found){map[nm]=found;delete guess[nm]}
+  else if(IDX[i][2]&&!map[nm]){map[nm]=IDX[i][2];guess[nm]=1}
+ }
+ sv('sig_idx',map);sv('sig_idx_guess',guess);
+}
+async function resolveUni(){
+ if(!S.jwt){$('uniSt').innerHTML='<span class="r">Pehle login karo.</span>';return}
+ S.uniStop=false;$('bUni').disabled=true;
+ try{
+  await resolveIdx();
+  var bad=await resolveList(UNI,$('uniSt'),'uniStop');
+  var map=ld('sig_tokens',{}),n=UNI.filter(function(s){return map[s]}).length;
+  $('uniSt').innerHTML=n+'/'+UNI.length+' stock aur '+Object.keys(ld('sig_idx',{})).length+' index ke token mile.'+(bad.length?'<br><span class="mu">Nahi mile (ab listed nahi ya naam badla): '+esc(bad.slice(0,12).map(function(x){return x.split(' ')[0]}).join(', '))+(bad.length>12?'...':'')+'</span>':'');
+ }catch(e){$('uniSt').innerHTML='<span class="r">Dikkat: '+esc(e.message)+'</span>'}
+ $('bUni').disabled=false;
+}
+async function discoverAll(){
+ var st=$('uniSt');
+ if(!S.jwt){st.innerHTML='<span class="r">Pehle login karo.</span>';return}
+ S.uniStop=false;$('bDisc').disabled=true;$('bUni').disabled=true;
+ var map=ld('sig_tokens',{}),D=ld('sig_disc',null),AL='ABCDEFGHIJKLMNOPQRSTUVWXYZ',CH='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789&-',errs=0;
+ if(!D||!D.q){D={q:[],done:{},len:{},cap:0,n:0,pass:0};for(var a=0;a<26;a++)for(var b=0;b<26;b++)D.q.push(AL[a]+AL[b])}
+ if(!D.len)D.len={};
+ try{await resolveIdx()}catch(e){}
+ while(!S.uniStop&&D.n<3500&&errs<12){
+  if(!D.q.length){
+   if((D.pass||0)>=3)break;
+   D.pass=(D.pass||0)+1;
+   Object.keys(D.len).forEach(function(k){if(D.len[k]>=D.cap&&D.len[k]>=5&&k.length<4&&!D.done[k+CH[0]]){for(var c=0;c<CH.length;c++)D.q.push(k+CH[c])}});
+   if(!D.q.length)break;
+  }
+  var q=D.q.shift();if(D.done[q])continue;
+  st.textContent='Poora market dhundh raha hoon: '+q+'  (baaki '+D.q.length+' search, ab tak '+Object.keys(map).length+' stock mile)';
+  try{
+   await gap('s',450);
+   var d=await searchTok(q);D.done[q]=1;D.len[q]=d.length;D.n++;errs=0;
+   if(d.length>D.cap)D.cap=d.length;
+   d.forEach(function(x){
+    var ts=String(x.tradingsymbol||x.symbol||'').toUpperCase();
+    if(/-EQ$/.test(ts)&&(!x.exchange||x.exchange==='NSE')){var sym=ts.replace(/-EQ$/,'');if(!map[sym])map[sym]=String(x.symboltoken||x.token)}
+   });
+   if(d.length>=Math.max(5,D.cap)&&q.length<4){for(var c=0;c<CH.length;c++)D.q.push(q+CH[c])}
+  }catch(e){
+   if(/AB4012|invalid searchscrip/i.test(e.message)){D.done[q]=1;D.len[q]=0;D.n++;errs=0;continue}
+   errs++;D.done[q]=1;if(/token|AG8001|AB8050/i.test(e.message)){st.innerHTML='<span class="r">Login purana ho gaya, dobara login karke "Poora market dhundo" dabao (wahin se aage chalega).</span>';break}}
+  if(D.n%15===0){sv('sig_tokens',map);sv('sig_disc',D)}
+ }
+ sv('sig_tokens',map);sv('sig_disc',D);
+ var n=Object.keys(map).length;
+ st.innerHTML=(D.q.length?'Roka gaya (baaki '+D.q.length+' search, dubara dabao to wahin se chalega). ':'<span class="g">Poora ho gaya.</span> ')+n+' stock ke token save hain (ek search me max '+D.cap+' result aaye).';
+ $('bDisc').disabled=false;$('bUni').disabled=false;
+}
+async function findTokens(){
+ var st=$('tokSt');
+ if(!S.jwt){st.innerHTML='<span class="r">Pehle login karo.</span>';return}
+ var wl=parseWL().filter(function(w){return !w.token}).map(function(w){return w.sym});
+ $('bTok').disabled=true;
+ try{var bad=await resolveList(wl,st,'uniStop');reportTokens();if(bad.length)st.innerHTML+='<br><span class="mu">Detail: '+esc(bad.join('; '))+'</span>'}catch(e){st.textContent='Dikkat: '+e.message}
  $('bTok').disabled=false;
- reportTokens();
- if(bad.length)$('tokSt').innerHTML+='<br><span class="mu">Detail: '+esc(bad.join('; '))+'</span>';
 }
 function reportTokens(){
  var map=ld('sig_tokens',{}),wl=parseWL(),miss=[];
@@ -213,10 +347,13 @@ function resolved(){
  parseWL().forEach(function(w){var t=w.token||map[w.sym];if(t)out.push({sym:w.sym,token:String(t)})});
  return out;
 }
+function uniResolved(){var map=ld('sig_tokens',{}),seen={},out=[];UNI.forEach(function(s){if(map[s]){out.push({sym:s,token:String(map[s])});seen[s]=1}});Object.keys(map).forEach(function(s){if(!seen[s])out.push({sym:s,token:String(map[s])})});return out}
+function idxResolved(){var m=ld('sig_idx',{});return Object.keys(m).map(function(n){return {sym:n,token:String(m[n]),idx:true}})}
 
 /* ---------- strategy ---------- */
 function vwapSeries(cs){var pv=0,vv=0;return cs.map(function(c){pv+=(c.h+c.l+c.c)/3*c.v;vv+=c.v;return vv>0?pv/vv:c.c})}
-function detect(cs,P,breadth,K){
+function idxP(P){return Object.assign({},P,{minRange:0.12,maxRange:1.2,minRisk:0.08,maxRisk:0.8,minVol:0})}
+function firstBreak(cs,P,breadth){
  var nOR=P.orMin/5;
  if(cs.length<nOR+2)return null;
  var orH=-1e18,orL=1e18,cumV=0,i;
@@ -227,20 +364,47 @@ function detect(cs,P,breadth,K){
   if(c.t>P.lastEntry)break;
   var up=c.c>orH,dn=c.c<orL;
   if(up||dn){
-   var dir=up?1:-1,avgV=cumV/i,vr=avgV>0?c.v/avgV:0;
+   var dir=up?1:-1,avgV=cumV/i,vr=avgV>0?c.v/avgV:1;
    var rng=(orH-orL)/c.c*100,body=(c.h-c.l)>0?Math.abs(c.c-c.o)/(c.h-c.l):0;
    var br=breadth?breadth(c.t):0;
    var okV=dir===1?c.c>vw[i]:c.c<vw[i],okB=dir===1?br>0:br<0,okR=rng>=P.minRange&&rng<=P.maxRange;
-   if(K){K.n++;if(!okV)K.v++;if(!okB)K.b++;if(!okR)K.r++}
-   if(!(okV&&okB&&okR))return null;
    var s1=Math.min(vr,4)/4*3,s2=body*2,s3=Math.min(Math.abs(br)/0.5,1)*2,s4=Math.min(Math.abs(c.c-vw[i])/(orH-orL),1),s5=(rng>=0.5&&rng<=1.2)?1:0.5,s6=c.t<='10:15'?1:0;
    var score=s1+s2+s3+s4+s5+s6;
-   return {i:i,t:c.t,dir:dir,orH:orH,orL:orL,close:c.c,vr:vr,body:body,br:br,rng:rng,score:score,
+   return {i:i,t:c.t,dir:dir,orH:orH,orL:orL,close:c.c,vr:vr,body:body,br:br,rng:rng,okV:okV,okB:okB,okR:okR,vw:vw[i],score:score,
     reasons:['Volume '+f2(vr)+'x','Candle body '+Math.round(body*100)+'%','Market '+(br>0?'upar ':'neeche ')+f2(br)+'%','VWAP ke '+(dir>0?'upar':'neeche'),'Range '+f2(rng)+'%']};
   }
   cumV+=c.v;
  }
  return null;
+}
+function detect(cs,P,breadth,K){
+ var x=firstBreak(cs,P,breadth);
+ if(!x)return null;
+ if(K){K.n++;if(!x.okV)K.v++;if(!x.okB)K.b++;if(!x.okR)K.r++}
+ if(!(x.okV&&x.okB&&x.okR))return null;
+ return x;
+}
+function explain(cs,P,br){
+ var nOR=P.orMin/5,o=[];
+ if(cs.length<nOR){o.push('Abhi opening range (9:15 se 9:30) poori nahi hui.');return o}
+ var hi=-1e18,lo=1e18,i;for(i=0;i<nOR;i++){hi=Math.max(hi,cs[i].h);lo=Math.min(lo,cs[i].l)}
+ var last=cs[cs.length-1];
+ o.push('Opening range: '+f2(lo)+' se '+f2(hi)+' ('+f2((hi-lo)/last.c*100)+'% chaudi)');
+ o.push('Abhi ka bhav: '+f2(last.c)+' ('+last.t+' candle)');
+ var x=firstBreak(cs,P,br);
+ if(!x){
+  if(last.c<=hi&&last.c>=lo)o.push('Abhi range ke andar hai. Upar breakout tak '+f2((hi-last.c)/last.c*100)+'%, neeche tak '+f2((last.c-lo)/last.c*100)+'%.');
+  else o.push('Breakout ka time (10:55 tak) nikal gaya ya koi candle range ke bahar band nahi hui.');
+  return o;
+ }
+ o.push('Pehla breakout: '+x.t+' ki candle '+(x.dir>0?'upar':'neeche')+' band hui.');
+ o.push((x.okV?'✓':'✗')+' VWAP ('+f2(x.vw)+') ke '+(x.dir>0?'upar':'neeche'));
+ o.push((x.okB?'✓':'✗')+' Market ki disha mel khati hai (poore market ka average '+f2(x.br)+'%)');
+ o.push((x.okR?'✓':'✗')+' Opening range '+f2(x.rng)+'% ('+P.minRange+' se '+P.maxRange+' ke andar chahiye)');
+ o.push('Volume '+f2(x.vr)+'x (chahiye '+P.minVol+'x), score '+f2(x.score)+'/10 (chahiye '+P.minScore+')');
+ var pass=x.okV&&x.okB&&x.okR&&x.vr>=P.minVol&&x.score>=P.minScore;
+ o.push(pass?'Natija: SIGNAL banta hai.':'Natija: signal nahi banta.');
+ return o;
 }
 function simulate(cs,tr,P){
  var j=tr.i+1;if(j>=cs.length)return null;
@@ -314,9 +478,7 @@ function prep(data,P){
 }
 function evalCfg(pr,days,P){
  var tr=[];
- days.forEach(function(d){
-  pick(pr.cands[d].slice(),P).forEach(function(c){tr.push({date:d,sym:c.sym,net:c.sim.net,gross:c.sim.gross})});
- });
+ days.forEach(function(d){pick(pr.cands[d].slice(),P).forEach(function(c){tr.push({date:d,sym:c.sym,net:c.sim.net,gross:c.sim.gross})})});
  return tr;
 }
 function walkForward(pr,P){
@@ -329,11 +491,16 @@ function walkForward(pr,P){
  var Q2=Object.assign({},P,{minVol:best.v,minScore:best.sc});
  return {best:best,inS:best.s,oos:stats(evalCfg(pr,b,Q2)),all:stats(evalCfg(pr,ds,Q2)),nd:ds.length,cut:cut};
 }
+function btList(){
+ var u=$('btU').value;
+ if(u==='wl')return resolved();
+ var n=+u;return uniResolved().slice(0,n);
+}
 async function runBt(){
  if(S.run)return;
- var wl=resolved(),st=$('btSt'),out=$('btOut');out.innerHTML='';
+ var wl=btList(),st=$('btSt'),out=$('btOut');out.innerHTML='';
  if(!S.jwt){st.textContent='Pehle login karo.';return}
- if(wl.length<5){st.textContent='Kam se kam 5 stock ke token chahiye (Settings me Tokens dhundo).';return}
+ if(wl.length<5){st.textContent='Kam se kam 5 stock ke token chahiye (Settings me token dhundo).';return}
  var P=cfg(),months=+$('btM').value,to=ymd(istNow()),from=addDays(to,-30*months);
  S.run=true;S.btStop=false;$('bBt').disabled=true;
  var data={};
@@ -342,7 +509,7 @@ async function runBt(){
    if(S.btStop)throw new Error('Roka gaya');
    st.textContent='Data le raha hoon: '+wl[i].sym+' ('+(i+1)+'/'+wl.length+')';
    try{data[wl[i].sym]=byDay(await getCandles(wl[i].token,from,to))}
-   catch(e){st.textContent='Dikkat '+wl[i].sym+': '+e.message;await sleep(900)}
+   catch(e){st.textContent='Dikkat '+wl[i].sym+': '+e.message;await sleep(900*scale())}
   }
   if(Object.keys(data).length<5)throw new Error('Kaafi stock ka data nahi mila.');
   st.textContent='Hisaab ho raha hai...';await sleep(30);
@@ -350,52 +517,170 @@ async function runBt(){
   var h='<div class="box"><span class="pill '+v.k+'">'+esc(v.t)+'</span></div>';
   h+='<div class="box"><b>Pehle 60% din (setting chunne ke liye)</b><br><span class="mu">minVol '+r.best.v+'x, minScore '+r.best.sc+'</span><pre>'+esc(fmtStats(r.inS))+'</pre></div>';
   h+='<div class="box"><b>Baaki 40% din (asli parakh, ye dekho)</b><pre>'+esc(fmtStats(r.oos))+'</pre></div>';
-  var K=pr.K;h+='<div class="box mu"><b>Filter ka hisaab:</b> '+K.n+' breakout bane. VWAP se hate '+K.v+', market ki disha se hate '+K.b+', range se hate '+K.r+' (ek breakout ke ek se zyada kaaran ho sakte hain), risk size se hate '+K.s+'. Bache '+K.ok+'.<br>Bahut kam bache to Settings me range ki seema (min/max %) badal kar dekho.</div>';
-  h+='<div class="mu">'+r.nd+' trading din, kharcha '+P.cost+'%. Entry = trigger ke agle candle ka open. Dono SL aur target ek hi candle me hon to SL maana gaya.</div>';
+  var K=pr.K;h+='<div class="box mu"><b>Filter ka hisaab:</b> '+K.n+' breakout bane. VWAP se hate '+K.v+', market ki disha se hate '+K.b+', range se hate '+K.r+' (ek breakout ke ek se zyada kaaran ho sakte hain), risk size se hate '+K.s+'. Bache '+K.ok+'.</div>';
+  h+='<div class="mu">'+Object.keys(data).length+' stock, '+r.nd+' trading din, kharcha '+P.cost+'%. Entry = trigger ke agle candle ka open. Dono SL aur target ek hi candle me hon to SL maana gaya.</div>';
   out.innerHTML=h;st.textContent='Ho gaya.';
  }catch(e){st.textContent='Rukk gaya: '+e.message}
  S.run=false;$('bBt').disabled=false;
 }
 
-/* ---------- live ---------- */
+/* ---------- market snapshot ---------- */
+function num(x){var n=+x;return isFinite(n)?n:0}
+async function refreshMarket(){
+ if(M.busy)return;
+ if(!S.jwt){$('mSt').textContent='Pehle login karo (Settings tab).';return}
+ var items=idxResolved().concat(uniResolved().map(function(x){x.idx=false;return x}));
+ if(!items.length){$('mSt').innerHTML='Pehle Settings me <b>Market list ke token dhundo</b> dabao (ek baar).';return}
+ M.busy=true;M.err=0;$('bRef').disabled=true;
+ try{
+  for(var i=0;i<items.length;i+=50){
+   var b=items.slice(i,i+50);
+   b.forEach(function(x){M.names[x.token]=x.sym;M.idx[x.token]=!!x.idx});
+   $('mSt').textContent='Market ka data aa raha hai... '+Math.min(i+50,items.length)+'/'+items.length;
+   var f=[];
+   try{f=await quote(b.map(function(x){return x.token}))}catch(e){M.err=(M.err||0)+1;if(/token|AG8001|AB8050/i.test(e.message))throw e;continue}
+   f.forEach(function(q){
+    var t=String(q.symbolToken),o=num(q.open),h=num(q.high),l=num(q.low),ltp=num(q.ltp),pc=num(q.close);
+    var pct=q.percentChange!=null&&q.percentChange!==''?num(q.percentChange):(pc>0?(ltp/pc-1)*100:0);
+    M.snap[t]={t:t,n:M.names[t]||q.tradingSymbol,ltp:ltp,o:o,h:h,l:l,pc:pc,pct:pct,vw:num(q.avgPrice),vol:num(q.tradeVolume),
+     ucl:num(q.upperCircuit),lcl:num(q.lowerCircuit),w52h:num(q['52WeekHigh']),w52l:num(q['52WeekLow']),ts:q.tradingSymbol||'',idx:!!M.idx[t]};
+   });
+  }
+  M.t=Date.now();
+  $('mSt').innerHTML=hm(istNow())+' par update ('+items.length+' me se '+stocksNow().length+' stock + index).'+(M.err?' <span class="r">'+M.err+' batch fail hue.</span>':'')+(marketOpen()?'':' <span class="r">Market band hai, ye pichle band ka data hai.</span>');
+  renderMarket();
+ }catch(e){$('mSt').innerHTML='<span class="r">Dikkat: '+esc(e.message)+'</span>'}
+ M.busy=false;$('bRef').disabled=false;
+}
+function stocksNow(){return Object.keys(M.snap).map(function(k){return M.snap[k]}).filter(function(x){return !x.idx&&x.ltp>0})}
+function liquid(x,c){c=c||cfg();return x.ltp>=c.minPrice&&x.vol*x.ltp>=c.minTurn*1e7}
+function circuitNear(x){return (x.ucl>0&&x.ltp>=x.ucl*0.985)||(x.lcl>0&&x.ltp<=x.lcl*1.015)}
+function posOf(x){return x.h>x.l?(x.ltp-x.l)/(x.h-x.l):0.5}
+function breadth(){
+ var a=stocksNow(),c=cfg(),lq=a.filter(function(x){return liquid(x,c)});
+ if(lq.length>=30)a=lq;
+ var up=0,dn=0,sum=0;
+ a.forEach(function(x){if(x.pct>0.05)up++;else if(x.pct<-0.05)dn++;sum+=x.pct});
+ return {n:a.length,up:up,dn:dn,flat:a.length-up-dn,avg:a.length?sum/a.length:0};
+}
+function nearHigh(x){return x.h>0&&(x.h-x.ltp)/x.ltp*100<=0.25&&x.pct>=0.4}
+function nearLow(x){return x.l>0&&(x.ltp-x.l)/x.ltp*100<=0.25&&x.pct<=-0.4}
+var FILT=[['all','Sab'],['lq','Liquid (turnover theek)'],['up','Badhe'],['dn','Gire'],['nh','High ke paas'],['nl','Low ke paas'],['vu','VWAP ke upar'],['vd','VWAP ke neeche']];
+function renderMarket(){
+ var ix='';
+ idxResolved().forEach(function(it){
+  var x=M.snap[it.token];if(!x)return;
+  var up=x.pct>=0,g=ld('sig_idx_guess',{})[it.sym];
+  ix+='<div class="ic"><b>'+esc(it.sym)+'</b>'+(g?' <span class="mu">(token andaaza)</span>':'')+'<div class="v">'+f2(x.ltp)+'</div><div class="'+(up?'g':'r')+'">'+(up?'+':'')+f2(x.pct)+'%</div><div class="bar"><i style="left:calc('+Math.round(posOf(x)*100)+'% - 2px)"></i></div></div>';
+ });
+ $('mIdx').innerHTML=ix||'<div class="mu">Index ka data nahi aaya.</div>';
+ var b=breadth(),tot=Math.max(1,b.n);
+ $('mBr').innerHTML='<div class="mu">'+b.n+' stock: <span class="g">'+b.up+' badhe</span>, <span class="r">'+b.dn+' gire</span>, '+b.flat+' sthir. Average '+(b.avg>=0?'+':'')+f2(b.avg)+'%</div><div class="bb"><div style="width:'+(b.up/tot*100)+'%;background:var(--g)"></div><div style="width:'+(b.flat/tot*100)+'%;background:#556"></div><div style="width:'+(b.dn/tot*100)+'%;background:var(--r)"></div></div>';
+ var fh='';FILT.forEach(function(f){fh+='<button class="chip'+(M.filter===f[0]?' on':'')+'" data-f="'+f[0]+'">'+f[1]+'</button>'});
+ $('mf').innerHTML=fh;
+ var q=$('mq').value.trim().toUpperCase(),a=stocksNow().filter(function(x){
+  if(q&&x.n.toUpperCase().indexOf(q)<0)return false;
+  switch(M.filter){case 'lq':return liquid(x);case 'up':return x.pct>0;case 'dn':return x.pct<0;case 'nh':return nearHigh(x);case 'nl':return nearLow(x);case 'vu':return x.vw>0&&x.ltp>x.vw;case 'vd':return x.vw>0&&x.ltp<x.vw}
+  return true;
+ });
+ var so=$('ms').value;
+ a.sort(function(p,r){
+  switch(so){case 'npct':return p.pct-r.pct;case 'pos':return posOf(r)-posOf(p);case 'neg':return posOf(p)-posOf(r);case 'vol':return r.vol-p.vol;case 'name':return p.n<r.n?-1:1}
+  return r.pct-p.pct;
+ });
+ var h='';
+ a.slice(0,M.limit).forEach(function(x){
+  var up=x.pct>=0,tg='';
+  if(nearHigh(x))tg+='<span class="pill pg">H</span> ';
+  if(nearLow(x))tg+='<span class="pill pr">L</span> ';
+  if(x.vw>0)tg+='<span class="mu">VWAP '+(x.ltp>x.vw?'▲':'▼')+'</span>';
+  h+='<div class="mr" data-t="'+x.t+'"><div class="mn"><b>'+esc(x.n)+'</b><div>'+tg+'</div><div class="bar" style="width:90px"><i style="left:calc('+Math.round(posOf(x)*100)+'% - 2px)"></i></div></div><div class="mp"><div>'+f2(x.ltp)+'</div><div class="'+(up?'g':'r')+'">'+(up?'+':'')+f2(x.pct)+'%</div></div></div>';
+ });
+ $('mList').innerHTML=h||'<div class="mu" style="padding:10px">Koi stock nahi mila.</div>';
+ $('bMore').style.display=a.length>M.limit?'inline-block':'none';
+ if(M.sel&&M.snap[M.sel])showDet(M.sel,true);
+}
+function showDet(t,keep){
+ var x=M.snap[t];if(!x)return;M.sel=t;
+ var up=x.pct>=0;
+ $('mDetC').style.display='block';
+ var old=keep?($('mInsp')?$('mInsp').innerHTML:''):'';
+ $('mDet').innerHTML='<b style="font-size:17px">'+esc(x.n)+'</b> <span class="'+(up?'g':'r')+'">'+f2(x.ltp)+' ('+(up?'+':'')+f2(x.pct)+'%)</span>'+
+  '<pre style="margin-top:6px">Open: '+f2(x.o)+'   High: '+f2(x.h)+'   Low: '+f2(x.l)+'\nPichla close: '+f2(x.pc)+'   VWAP: '+(x.vw>0?f2(x.vw):'-')+'\nVolume: '+Math.round(x.vol).toLocaleString('en-IN')+'\n52 hafta: '+f2(x.w52l)+' se '+f2(x.w52h)+'\nCircuit: '+f2(x.lcl)+' se '+f2(x.ucl)+'</pre>'+
+  (x.idx?'':'<button id="bInsp">Signal jaanch (5-min candle)</button>')+'<div id="mInsp">'+old+'</div>';
+ var bi=$('bInsp');if(bi)bi.onclick=function(){inspect(t)};
+ if(!keep&&$('mDetC').scrollIntoView)$('mDetC').scrollIntoView({behavior:'smooth'});
+}
+async function inspect(t){
+ var x=M.snap[t],el=$('mInsp');if(!x)return;
+ el.textContent='Candle data aa raha hai...';
+ try{
+  var d=ymd(istNow()),cs=await getCandles(t,d,d),P=cfg(),now=hm(istNow()),done=cs.filter(function(c){return addMin(c.t,5)<=now});
+  var br=breadth().avg;
+  el.innerHTML='<div class="box"><pre>'+esc(explain(done,P,function(){return br}).join('\n'))+'</pre></div>';
+ }catch(e){el.innerHTML='<span class="r">Dikkat: '+esc(e.message)+'</span>'}
+}
+function startAuto(){
+ S.auto=!S.auto;$('bAuto').textContent='Auto refresh: '+(S.auto?'chalu':'band');
+ if(S.auto)(async function loop(){while(S.auto){await refreshMarket();var w=Math.max(30,Math.ceil(uniResolved().length/50)*1.2+10);for(var k=0;k<w&&S.auto;k++)await sleep(1000*Math.max(scale(),0.01))}})();
+}
+
+/* ---------- live signals ---------- */
 function today(){var t=ld('sig_today',null),d=ymd(istNow());if(!t||t.date!==d){t={date:d,sigs:[],emitted:[]};sv('sig_today',t)}return t}
 function completeOnly(cs,nowT){return cs.filter(function(c){return addMin(c.t,5)<=nowT})}
-function scanData(todayData,nowT,P,T){
+function scanData(todayData,nowT,P,T,meta,brv){
  var syms=Object.keys(todayData),map={};
  syms.forEach(function(s){var m={};m[T.date]=completeOnly(todayData[s],nowT);map[s]=m});
- var br=breadthMaker(map,T.date),sigs=[],watch=[];
+ var br=(typeof brv==='number')?function(){return brv}:breadthMaker(map,T.date),sigs=[],watch=[];
  syms.forEach(function(s){
-  var cs=map[s][T.date];if(!cs||cs.length<P.orMin/5+1)return;
-  var tr=detect(cs,P,br);
+  var isI=!!(meta&&meta[s]&&meta[s].idx),Pi=isI?idxP(P):P;
+  var cs=map[s][T.date];if(!cs||cs.length<Pi.orMin/5+1)return;
+  var tr=detect(cs,Pi,br);
   if(!tr){
-   var nOR=P.orMin/5,hi=-1e18,lo=1e18;
+   var nOR=Pi.orMin/5,hi=-1e18,lo=1e18;
    for(var i=0;i<nOR;i++){hi=Math.max(hi,cs[i].h);lo=Math.min(lo,cs[i].l)}
    var last=cs[cs.length-1],d=Math.min((hi-last.c)/last.c*100,(last.c-lo)/last.c*100);
-   if(last.c<=hi&&last.c>=lo)watch.push({sym:s,d:d,dir:(hi-last.c)<(last.c-lo)?'upar':'neeche'});
+   if(last.c<=hi&&last.c>=lo)watch.push({sym:s,d:d,dir:(hi-last.c)<(last.c-lo)?'upar':'neeche',idx:isI});
    return;
   }
   var last2=cs[cs.length-1],sl=tr.dir>0?tr.orL:tr.orH,R=Math.abs(tr.close-sl);
   var fresh=tr.i>=cs.length-2&&Math.abs(last2.c-tr.close)<=0.5*R;
   if(!fresh||T.emitted.indexOf(s)>=0)return;
-  if(tr.score<P.minScore||tr.vr<P.minVol)return;
-  var rp=R/tr.close*100;if(rp>P.maxRisk||rp<P.minRisk)return;
-  sigs.push({sym:s,tr:tr,sl:sl,R:R});
+  if(tr.score<Pi.minScore||tr.vr<Pi.minVol)return;
+  var rp=R/tr.close*100;if(rp>Pi.maxRisk||rp<Pi.minRisk)return;
+  sigs.push({sym:s,tr:tr,sl:sl,R:R,idx:isI});
  });
  sigs.sort(function(a,b){return b.tr.score-a.tr.score});
  watch.sort(function(a,b){return a.d-b.d});
  return {sigs:sigs,watch:watch.slice(0,5)};
 }
 function makeSignal(x,token,P){
- var dir=x.tr.dir,e=x.tr.close,tgt=e+dir*2*x.R,risk=P.cap*P.riskPct/100,qty=Math.floor(risk/x.R);
- return {id:Date.now()+'-'+x.sym,date:ymd(istNow()),sym:x.sym,token:token,dir:dir,t:x.tr.t,i:x.tr.i,entry:e,sl:x.sl,tgt:tgt,R:x.R,qty:qty,score:x.tr.score,reasons:x.tr.reasons,orH:x.tr.orH,orL:x.tr.orL,taken:null,res:null};
+ var dir=x.tr.dir,e=x.tr.close,tgt=e+dir*2*x.R,risk=P.cap*P.riskPct/100,qty=x.idx?0:Math.floor(risk/x.R);
+ return {id:Date.now()+'-'+x.sym,date:ymd(istNow()),sym:x.sym,idx:!!x.idx,token:token,dir:dir,t:x.tr.t,i:x.tr.i,entry:e,sl:x.sl,tgt:tgt,R:x.R,qty:qty,score:x.tr.score,reasons:x.tr.reasons,orH:x.tr.orH,orL:x.tr.orL,taken:null,res:null};
+}
+function pickCandidates(){
+ var a=stocksNow().filter(function(x){return liquid(x)&&!circuitNear(x)}),cf=cfg(),c=[];
+ a.forEach(function(x){
+  if(!liquid(x,cf)||circuitNear(x))return;
+  var up=x.pct>=0.4&&x.vw>0&&x.ltp>=x.vw&&x.h>0&&(x.h-x.ltp)/x.ltp*100<=0.35;
+  var dn=x.pct<=-0.4&&x.vw>0&&x.ltp<=x.vw&&x.l>0&&(x.ltp-x.l)/x.ltp*100<=0.35;
+  if(up||dn)c.push(x);
+ });
+ c.sort(function(p,r){return Math.abs(r.pct)-Math.abs(p.pct)});
+ var out=c.slice(0,25);
+ if(out.length<8){
+  var seen={};out.forEach(function(x){seen[x.t]=1});
+  a.slice().sort(function(p,r){return Math.abs(r.pct)-Math.abs(p.pct)}).forEach(function(x){if(out.length<12&&!seen[x.t]){out.push(x);seen[x.t]=1}});
+ }
+ return out.map(function(x){return {sym:x.n,token:x.t,idx:false}});
 }
 function beep(){try{var a=new (window.AudioContext||window.webkitAudioContext)(),o=a.createOscillator(),g=a.createGain();o.frequency.value=880;g.gain.value=0.2;o.connect(g);g.connect(a.destination);o.start();setTimeout(function(){o.stop();a.close()},400)}catch(e){}try{navigator.vibrate&&navigator.vibrate([200,100,200])}catch(e){}}
 function renderSigs(T,watch){
  var h='';
  T.sigs.forEach(function(s){
   var buy=s.dir>0;
-  h+='<div class="box '+(buy?'buy':'sell')+'"><b>'+(buy?'BUY (Long)':'SELL (Short)')+' '+esc(s.sym)+'</b> <span class="pill po">Score '+f2(s.score)+'/10</span><br>'+
-   '<span class="mu">Trigger '+s.t+' ke candle par</span><pre>Entry (abhi ke aas-paas): '+f2(s.entry)+'\nStop-loss: '+f2(s.sl)+'\nTarget (2x): '+f2(s.tgt)+'\nRisk: '+f2(s.R)+' per share\nQuantity: '+s.qty+'  (risk ₹'+Math.round(s.qty*s.R)+')\nKaaran: '+esc(s.reasons.join(', '))+'</pre>'+
+  h+='<div class="box '+(buy?'buy':'sell')+'"><b>'+(buy?'BUY (Long)':'SELL (Short)')+' '+esc(s.sym)+'</b> '+(s.idx?'<span class="pill po">INDEX</span> ':'')+'<span class="pill po">Score '+f2(s.score)+'/10</span><br>'+
+   '<span class="mu">Trigger '+s.t+' ke candle par</span><pre>Entry (abhi ke aas-paas): '+f2(s.entry)+'\nStop-loss: '+f2(s.sl)+'\nTarget (2x): '+f2(s.tgt)+'\nRisk: '+f2(s.R)+(s.idx?' points\nQuantity: lot size ke hisaab se khud nikalo (futures/options)':' per share\nQuantity: '+s.qty+'  (risk ₹'+Math.round(s.qty*s.R)+')')+'\nKaaran: '+esc(s.reasons.join(', '))+'</pre>'+
    '<div class="mu">Broker app me <b>'+esc(s.sym)+'</b> ka bhav check karo. Agar alag dikhe to trade mat lo.</div>'+
    (s.taken===null?'<button data-take="'+s.id+'">Maine liya</button><button class="s" data-skip="'+s.id+'">Chhod diya</button>':'<span class="mu">'+(s.taken?'Liya hua':'Chhoda')+'</span>')+'</div>';
  });
@@ -417,33 +702,36 @@ async function liveCycle(){
  if(nowT<'09:35'){$('liveSt').textContent='Market 9:15 par khulta hai. Pehla scan 9:35 ke baad hoga (range 9:30 tak banti hai).';return}
  if(nowT>'15:20'){$('liveSt').textContent='Market band ho gaya. Natija Journal me dekho.';renderSigs(T,[]);return}
  if(T.sigs.length>=P.maxSig){$('liveSt').innerHTML='Aaj ke '+P.maxSig+' signal ho gaye. Ab koi naya signal nahi aayega.';renderSigs(T,[]);return}
- var wl=resolved();if(wl.length<5){$('liveSt').textContent='Settings me watchlist aur tokens dekho.';return}
- $('liveSt').textContent=nowT+' par data le raha hoon...';
- var tdata={};
- for(var i=0;i<wl.length;i++){
+ if(!uniResolved().length){$('liveSt').innerHTML='Pehle Settings me <b>Market list ke token dhundo</b> dabao.';return}
+ $('liveSt').textContent=nowT+' par poora market dekh raha hoon...';
+ await refreshMarket();
+ if(!S.run)return;
+ var cand=pickCandidates().concat(idxResolved().filter(function(x){return M.snap[x.token]&&x.sym!=='India VIX'}));
+ var tdata={},meta={};
+ for(var i=0;i<cand.length;i++){
   if(!S.run)return;
-  try{var cs=await getCandles(wl[i].token,T.date,T.date);if(cs.length)tdata[wl[i].sym]=cs}catch(e){$('liveSt').textContent='Dikkat '+wl[i].sym+': '+e.message}
-  await sleep(delay());
+  $('liveSt').textContent='Candle jaanch: '+cand[i].sym+' ('+(i+1)+'/'+cand.length+')';
+  try{var cs=await getCandles(cand[i].token,T.date,T.date);if(cs.length){tdata[cand[i].sym]=cs;meta[cand[i].sym]={idx:!!cand[i].idx,token:cand[i].token}}}catch(e){$('liveSt').textContent='Dikkat '+cand[i].sym+': '+e.message}
  }
- if(!Object.keys(tdata).length){$('liveSt').textContent='Aaj ka data nahi mila (market band ya login purana).';return}
- var r=scanData(tdata,hm(istNow()),P,T),tok={};wl.forEach(function(w){tok[w.sym]=w.token});
+ if(!Object.keys(tdata).length){$('liveSt').textContent='Aaj ka candle data nahi mila (market band ya login purana).';return}
+ var r=scanData(tdata,hm(istNow()),P,T,meta,breadth().avg);
  for(var k=0;k<r.sigs.length&&T.sigs.length<P.maxSig;k++){
-  var s=makeSignal(r.sigs[k],tok[r.sigs[k].sym],P);T.sigs.push(s);T.emitted.push(s.sym);beep();
+  var s=makeSignal(r.sigs[k],meta[r.sigs[k].sym].token,P);T.sigs.push(s);T.emitted.push(s.sym);beep();
   try{if(window.Notification&&Notification.permission==='granted')new Notification('Signal: '+s.sym,{body:(s.dir>0?'BUY ':'SELL ')+f2(s.entry)+' SL '+f2(s.sl)})}catch(e){}
  }
  sv('sig_today',T);saveJournal(T);renderSigs(T,r.watch);
- $('liveSt').textContent=hm(istNow())+' tak scan hua. Aaj '+T.sigs.length+'/'+P.maxSig+' signal.';
+ $('liveSt').textContent=hm(istNow())+' tak scan hua ('+cand.length+' ke candle jaanche). Aaj '+T.sigs.length+'/'+P.maxSig+' signal.';
 }
 function startLive(){
  if(S.run){return}
- if(!S.jwt){$('liveSt').textContent='Pehle login karo.';return}
+ if(!S.jwt){$('liveSt').textContent='Pehle login karo (Settings tab).';return}
  try{window.Notification&&Notification.requestPermission&&Notification.requestPermission()}catch(e){}
  S.run=true;$('bStart').disabled=true;
  (async function loop(){
   while(S.run){
    try{await liveCycle()}catch(e){$('liveSt').textContent='Dikkat: '+e.message}
    var n=istNow(),wait=(5-(n.getMinutes()%5))*60-n.getSeconds()+8;
-   for(var k=0;k<wait&&S.run;k++)await sleep(1000);
+   for(var k=0;k<wait&&S.run;k++)await sleep(1000*Math.max(scale(),0.01));
   }
   $('bStart').disabled=false;
  })();
@@ -452,15 +740,15 @@ function stopLive(){S.run=false;$('liveSt').textContent='Scan roka.'}
 
 /* ---------- journal ---------- */
 async function evalJournal(){
- var j=ld('sig_journal',[]),P=cfg(),st=0;
+ var j=ld('sig_journal',[]),P=cfg();
  for(var i=0;i<j.length;i++){
   var s=j[i];
   if(s.res||s.date>=ymd(istNow())&&hm(istNow())<'15:20')continue;
   try{
    var cs=byDay(await getCandles(s.token,s.date,s.date))[s.date];if(!cs)continue;
    var idx=-1;cs.forEach(function(c,k){if(c.t===s.t)idx=k});if(idx<0)continue;
-   var r=simulate(cs,{i:idx,dir:s.dir,orH:s.orH,orL:s.orL},P);
-   s.res=r?{net:r.net,gross:r.gross,exit:r.exitT}:{net:0,gross:0,exit:'-',skip:true};st++;
+   var r=simulate(cs,{i:idx,dir:s.dir,orH:s.orH,orL:s.orL},s.idx?idxP(P):P);
+   s.res=r?{net:r.net,gross:r.gross,exit:r.exitT}:{net:0,gross:0,exit:'-',skip:true};
   }catch(e){$('jOut').textContent='Dikkat: '+e.message;break}
  }
  sv('sig_journal',j);renderJournal();
@@ -479,28 +767,40 @@ function renderJournal(){
 /* ---------- init ---------- */
 function loadUi(){
  var c=cfg();
- $('cap').value=c.cap;$('riskPct').value=c.riskPct;$('cost').value=c.cost;$('maxSig').value=c.maxSig;$('minVol').value=c.minVol;$('minScore').value=c.minScore;$('minRange').value=c.minRange;$('maxRange').value=c.maxRange;
+ $('cap').value=c.cap;$('riskPct').value=c.riskPct;$('cost').value=c.cost;$('maxSig').value=c.maxSig;$('minVol').value=c.minVol;$('minScore').value=c.minScore;$('minRange').value=c.minRange;$('maxRange').value=c.maxRange;$('minTurn').value=c.minTurn;$('minPrice').value=c.minPrice;
  $('wl').value=ld('sig_wl',DEF_WL);
  $('apiKey').value=ld('sig_key','');$('client').value=ld('sig_client','');
  try{var j=JSON.parse(sessionStorage.getItem('sig_jwt'));if(j&&j.d===ymd(istNow())){S.jwt=j.t;$('loginSt').innerHTML='<span class="g">Aaj ka login chalu hai.</span>'}}catch(e){}
- reportTokens();renderJournal();renderSigs(today(),[]);
+ setLogged();reportTokens();renderJournal();renderSigs(today(),[]);renderMarket();
+ var n=uniResolved().length;if(n)$('uniSt').textContent=n+'/'+UNI.length+' stock aur '+idxResolved().length+' index ke token save hain.';
 }
 function saveCfg(){
  var c=cfg();
  c.cap=+$('cap').value||c.cap;c.riskPct=+$('riskPct').value||c.riskPct;c.cost=+$('cost').value||c.cost;
- c.maxSig=Math.max(1,Math.min(2,+$('maxSig').value||2));c.minVol=+$('minVol').value||c.minVol;c.minScore=+$('minScore').value||c.minScore;c.minRange=+$('minRange').value||c.minRange;c.maxRange=+$('maxRange').value||c.maxRange;
+ c.maxSig=Math.max(1,Math.min(2,+$('maxSig').value||2));c.minVol=+$('minVol').value||c.minVol;c.minScore=+$('minScore').value||c.minScore;c.minRange=+$('minRange').value||c.minRange;c.maxRange=+$('maxRange').value||c.maxRange;c.minTurn=+$('minTurn').value||c.minTurn;c.minPrice=+$('minPrice').value||c.minPrice;
  sv('sig_cfg',c);sv('sig_wl',$('wl').value);reportTokens();
  $('tokSt').innerHTML+=' <span class="g">Save ho gaya.</span>';
 }
+function tab(id){
+ Array.prototype.forEach.call(document.querySelectorAll('.sec'),function(s){s.classList.toggle('on',s.id===id)});
+ Array.prototype.forEach.call(document.querySelectorAll('.tab'),function(b){b.classList.toggle('on',b.getAttribute('data-tab')===id)});
+}
+Array.prototype.forEach.call(document.querySelectorAll('.tab'),function(b){b.onclick=function(){tab(b.getAttribute('data-tab'))}});
+$('mf').onclick=function(e){var f=e.target.getAttribute&&e.target.getAttribute('data-f');if(f){M.filter=f;M.limit=60;renderMarket()}};
+$('mList').onclick=function(e){var r=e.target.closest&&e.target.closest('.mr');if(r)showDet(r.getAttribute('data-t'))};
+$('mq').oninput=function(){M.limit=60;renderMarket()};$('ms').onchange=function(){renderMarket()};
+$('bMore').onclick=function(){M.limit+=60;renderMarket()};
+$('bRef').onclick=refreshMarket;$('bAuto').onclick=startAuto;
 $('bLogin').onclick=login;
-$('bLogout').onclick=function(){S.jwt='';try{sessionStorage.removeItem('sig_jwt')}catch(e){}$('loginSt').textContent='Logout ho gaya.'};
+$('bLogout').onclick=function(){S.jwt='';try{sessionStorage.removeItem('sig_jwt')}catch(e){}$('loginSt').textContent='Logout ho gaya.';setLogged()};
+$('bUni').onclick=resolveUni;$('bDisc').onclick=discoverAll;$('bUniStop').onclick=function(){S.uniStop=true};
 $('bTok').onclick=findTokens;$('bSave').onclick=saveCfg;
 $('bStart').onclick=startLive;$('bStop').onclick=stopLive;
 $('bBt').onclick=runBt;$('bBtStop').onclick=function(){S.btStop=true};
 $('bEval').onclick=evalJournal;
 $('bClr').onclick=function(){if(confirm('Journal saaf karein?')){sv('sig_journal',[]);renderJournal()}};
 loadUi();
-window.SIG={detect:detect,simulate:simulate,pick:pick,stats:stats,verdict:verdict,prep:prep,walkForward:walkForward,scanData:scanData,breadthMaker:breadthMaker,cfg:cfg,byDay:byDay,chunks:chunks,parseRows:parseRows,S:S,login:login,findTokens:findTokens,runBt:runBt,liveCycle:liveCycle,makeSignal:makeSignal,today:today};
+window.SIG={detect:detect,firstBreak:firstBreak,explain:explain,simulate:simulate,pick:pick,stats:stats,verdict:verdict,prep:prep,walkForward:walkForward,scanData:scanData,cfg:cfg,byDay:byDay,chunks:chunks,S:S,M:M,login:login,resolveUni:resolveUni,refreshMarket:refreshMarket,pickCandidates:pickCandidates,discoverAll:discoverAll,liveCycle:liveCycle,runBt:runBt,breadth:breadth,UNI:UNI,today:today,tab:tab};
 })();
 </script>
 </body>
