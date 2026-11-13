@@ -513,7 +513,7 @@ async function runBt(){
   }
   if(Object.keys(data).length<5)throw new Error('Kaafi stock ka data nahi mila.');
   st.textContent='Hisaab ho raha hai...';await sleep(30);
-  var pr=prep(data,P),r=walkForward(pr,P),v=verdict(r.oos);
+  var pr=prep(data,P),r=walkForward(pr,P),v=verdict(r.oos);window.SIG.lastPr=pr;
   var h='<div class="box"><span class="pill '+v.k+'">'+esc(v.t)+'</span></div>';
   h+='<div class="box"><b>Pehle 60% din (setting chunne ke liye)</b><br><span class="mu">minVol '+r.best.v+'x, minScore '+r.best.sc+'</span><pre>'+esc(fmtStats(r.inS))+'</pre></div>';
   h+='<div class="box"><b>Baaki 40% din (asli parakh, ye dekho)</b><pre>'+esc(fmtStats(r.oos))+'</pre></div>';
@@ -800,8 +800,9 @@ $('bBt').onclick=runBt;$('bBtStop').onclick=function(){S.btStop=true};
 $('bEval').onclick=evalJournal;
 $('bClr').onclick=function(){if(confirm('Journal saaf karein?')){sv('sig_journal',[]);renderJournal()}};
 loadUi();
-window.SIG={detect:detect,firstBreak:firstBreak,explain:explain,simulate:simulate,pick:pick,stats:stats,verdict:verdict,prep:prep,walkForward:walkForward,scanData:scanData,cfg:cfg,byDay:byDay,chunks:chunks,S:S,M:M,login:login,resolveUni:resolveUni,refreshMarket:refreshMarket,pickCandidates:pickCandidates,discoverAll:discoverAll,liveCycle:liveCycle,runBt:runBt,breadth:breadth,UNI:UNI,today:today,tab:tab};
+window.SIG={detect:detect,firstBreak:firstBreak,explain:explain,simulate:simulate,pick:pick,stats:stats,verdict:verdict,prep:prep,walkForward:walkForward,scanData:scanData,cfg:cfg,byDay:byDay,chunks:chunks,S:S,M:M,login:login,resolveUni:resolveUni,refreshMarket:refreshMarket,pickCandidates:pickCandidates,discoverAll:discoverAll,liveCycle:liveCycle,runBt:runBt,breadth:breadth,UNI:UNI,today:today,tab:tab,getCandles:getCandles,quote:quote,istNow:istNow,ymd:ymd,hm:hm,addMin:addMin,addDays:addDays,f2:f2,esc:esc,sv:sv,ld:ld,idxResolved:idxResolved,uniResolved:uniResolved,resolved:resolved,liquid:liquid,circuitNear:circuitNear,stocksNow:stocksNow,showDet:showDet,makeSignal:makeSignal,breadthMaker:breadthMaker};
 })();
 </script>
+<script src="extras.js"></script>
 </body>
 </html>
