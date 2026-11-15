@@ -208,19 +208,28 @@ async function login(){
 }
 function chunks(from,to){var out=[],a=from;while(a<=to){var b=addDays(a,29);if(b>to)b=to;out.push([a,b]);a=addDays(b,1)}return out}
 function parseRows(rows){return (rows||[]).map(function(r){return {d:String(r[0]).slice(0,10),t:String(r[0]).slice(11,16),o:+r[1],h:+r[2],l:+r[3],c:+r[4],v:+r[5]}})}
-async function getCandles(token,from,to){
- var all=[],today=ymd(istNow()),ch=chunks(from,to);
- for(var i=0;i<ch.length;i++){
-  var a=ch[i][0],b=ch[i][1],key='c5|'+token+'|'+a+'|'+b,rows=null;
-  if(b<today)rows=await idbGet(key);
-  if(!rows){
-   await gap('c',450);
-   var j=await api('/rest/secure/angelbroking/historical/v1/getCandleData',{exchange:'NSE',symboltoken:String(token),interval:'FIVE_MINUTE',fromdate:a+' 09:15',todate:b+' 15:30'},true);
-   rows=j.data||[];
-   if(b<today&&rows.length)await idbSet(key,rows);
-  }
-  all=all.concat(parseRows(rows));
+function chunksN(from,to,n){var out=[],a=from;while(a<=to){var b=addDays(a,n-1);if(b>to)b=to;out.push([a,b]);a=addDays(b,1)}return out}
+async function fetchRange(token,a,b,depth){
+ var today=ymd(istNow()),key='c5|'+token+'|'+a+'|'+b,rows=null;
+ if(b<today)rows=await idbGet(key);
+ if(rows)return rows;
+ try{
+  await gap('c',450);
+  var j=await api('/rest/secure/angelbroking/historical/v1/getCandleData',{exchange:'NSE',symboltoken:String(token),interval:'FIVE_MINUTE',fromdate:a+' 09:15',todate:b+' 15:30'},true);
+  rows=j.data||[];
+ }catch(e){
+  if(/AG8001|AB8050|Invalid Token/i.test(e.message)||a===b||depth>=3)throw e;
+  var n=Math.round((new Date(b)-new Date(a))/86400000),h=Math.floor(n/2),m=addDays(a,h);
+  var r1=await fetchRange(token,a,m,depth+1),r2=await fetchRange(token,addDays(m,1),b,depth+1);
+  S.cd=Math.max(1,Math.min(S.cd||30,h+1));
+  return r1.concat(r2);
  }
+ if(b<today&&rows.length)await idbSet(key,rows);
+ return rows;
+}
+async function getCandles(token,from,to){
+ var all=[],ch=chunksN(from,to,S.cd||30);
+ for(var i=0;i<ch.length;i++)all=all.concat(parseRows(await fetchRange(token,ch[i][0],ch[i][1],0)));
  return all;
 }
 function byDay(cs){
@@ -496,33 +505,53 @@ function btList(){
  if(u==='wl')return resolved();
  if(u==='all')return uniResolved();var n=+u;return uniResolved().slice(0,n);
 }
+async function buildPr(wl,from,to,P,prog){
+ var BR={},loaded=[],t0=Date.now(),i;
+ for(i=0;i<wl.length;i++){
+  if(S.btStop)break;
+  if(prog)prog('Data le raha hoon: '+wl[i].sym+' ('+(i+1)+'/'+wl.length+')'+(i>2?'  ~'+Math.max(1,Math.round((Date.now()-t0)/i*(wl.length-i)/60000))+' minute baaki':''));
+  try{
+   var days=byDay(await getCandles(wl[i].token,from,to));
+   Object.keys(days).forEach(function(d){var cs=days[d],o=cs[0].o,bd=BR[d]=BR[d]||{};cs.forEach(function(c){var x=bd[c.t]=bd[c.t]||{s:0,n:0};x.s+=(c.c/o-1)*100;x.n++})});
+   loaded.push(wl[i]);
+  }catch(e){S.lastErr=e.message;if(prog)prog('Dikkat '+wl[i].sym+': '+e.message);await sleep(900*scale())}
+ }
+ if(loaded.length<5)throw new Error('Kaafi stock ka data nahi mila.'+(S.lastErr?' Aakhri error: '+S.lastErr:''));
+ var K={n:0,v:0,b:0,r:0,s:0,ok:0},cands={},dset={};
+ function brFn(d){var bd=BR[d]||{};return function(t){var x=bd[t];return x&&x.n>=3?x.s/x.n:0}}
+ for(var j=0;j<loaded.length;j++){
+  var dd=byDay(await getCandles(loaded[j].token,from,to));
+  Object.keys(dd).forEach(function(d){
+   var cs=dd[d],tr=detect(cs,P,brFn(d),K);dset[d]=1;if(!tr)return;
+   var sim=simulate(cs,tr,P);if(!sim){K.s++;return}
+   K.ok++;delete tr.reasons;(cands[d]=cands[d]||[]).push({sym:loaded[j].sym,tr:tr,sim:sim});
+  });
+  if(j%20===0){if(prog)prog('Hisaab ho raha hai ('+(j+1)+'/'+loaded.length+')...');await sleep(0)}
+ }
+ var ds=Object.keys(dset).sort();ds.forEach(function(d){if(!cands[d])cands[d]=[]});
+ return {pr:{ds:ds,cands:cands,K:K},loaded:loaded};
+}
 async function runBt(){
  if(S.run)return;
  var wl=btList(),st=$('btSt'),out=$('btOut');out.innerHTML='';
  if(!S.jwt){st.textContent='Pehle login karo.';return}
  if(wl.length<5){st.textContent='Kam se kam 5 stock ke token chahiye (Settings me token dhundo).';return}
- var P=cfg(),months=+$('btM').value,to=ymd(istNow()),from=addDays(to,-30*months);
- S.run=true;S.btStop=false;$('bBt').disabled=true;
- var data={};
+ var P=cfg(),months=+$('btM').value,to=addDays(ymd(istNow()),-1),from=addDays(to,-30*months+1);
+ S.run=true;S.btStop=false;S.lastErr='';$('bBt').disabled=true;
  try{
-  for(var i=0;i<wl.length;i++){
-   if(S.btStop)throw new Error('Roka gaya');
-   st.textContent='Data le raha hoon: '+wl[i].sym+' ('+(i+1)+'/'+wl.length+')';
-   try{data[wl[i].sym]=byDay(await getCandles(wl[i].token,from,to))}
-   catch(e){st.textContent='Dikkat '+wl[i].sym+': '+e.message;await sleep(900*scale())}
-  }
-  if(Object.keys(data).length<5)throw new Error('Kaafi stock ka data nahi mila.');
-  st.textContent='Hisaab ho raha hai...';await sleep(30);
-  var pr=prep(data,P),r=walkForward(pr,P),v=verdict(r.oos);window.SIG.lastPr=pr;
+  var res=await buildPr(wl,from,to,P,function(t){st.textContent=t}),pr=res.pr;
+  window.SIG.lastPr=pr;
+  st.textContent='Nateeja nikaal raha hoon...';await sleep(30);
+  var r=walkForward(pr,P),v=verdict(r.oos);
   var h='<div class="box"><span class="pill '+v.k+'">'+esc(v.t)+'</span></div>';
   h+='<div class="box"><b>Pehle 60% din (setting chunne ke liye)</b><br><span class="mu">minVol '+r.best.v+'x, minScore '+r.best.sc+'</span><pre>'+esc(fmtStats(r.inS))+'</pre></div>';
   h+='<div class="box"><b>Baaki 40% din (asli parakh, ye dekho)</b><pre>'+esc(fmtStats(r.oos))+'</pre></div>';
   var K=pr.K;h+='<div class="box mu"><b>Filter ka hisaab:</b> '+K.n+' breakout bane. VWAP se hate '+K.v+', market ki disha se hate '+K.b+', range se hate '+K.r+' (ek breakout ke ek se zyada kaaran ho sakte hain), risk size se hate '+K.s+'. Bache '+K.ok+'.</div>';
-  h+='<div class="mu">'+Object.keys(data).length+' stock, '+r.nd+' trading din, kharcha '+P.cost+'%. Entry = trigger ke agle candle ka open. Dono SL aur target ek hi candle me hon to SL maana gaya.</div>';
+  h+='<div class="mu">'+res.loaded.length+' stock, '+r.nd+' trading din, kharcha '+P.cost+'%. Entry = trigger ke agle candle ka open. Dono SL aur target ek hi candle me hon to SL maana gaya.</div>';
   out.innerHTML=h;st.textContent='Ho gaya.';
  }catch(e){st.textContent='Rukk gaya: '+e.message}
  S.run=false;$('bBt').disabled=false;
-}
+   }
 
 /* ---------- market snapshot ---------- */
 function num(x){var n=+x;return isFinite(n)?n:0}
