@@ -190,15 +190,15 @@ function renderMap(){
 setInterval(function(){if(MV==='rad'&&$('tMap')&&$('tMap').classList.contains('on'))drawRadar($('xmc'),Date.now())},180);
 
 /* ---------- AI: plan + news ---------- */
-async function gem(prompt,search){
+async function gem(prompt,search,model){
  var key=(($('aiK')&&$('aiK').value)||ld('sig_gem','')).trim();
  if(!key)throw new Error('Pehle AI tab me Gemini API key daalo.');
  sv('sig_gem',key);
  var body={contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:0.5,maxOutputTokens:1600}};
  if(search)body.tools=[{google_search:{}}];
- var res=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',{method:'POST',headers:{'content-type':'application/json','x-goog-api-key':key},body:JSON.stringify(body)});
+ var res=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+(model||'gemini-flash-latest')+':generateContent',{method:'POST',headers:{'content-type':'application/json','x-goog-api-key':key},body:JSON.stringify(body)});
  var d=null;try{d=await res.json()}catch(e){}
- if(!res.ok||!d)throw new Error((d&&d.error&&d.error.message)||('Error '+res.status));
+ if(!res.ok||!d){var m=(d&&d.error&&d.error.message)||('Error '+res.status),er=new Error(m);er.quota=(res.status===429||/quota|RESOURCE_EXHAUSTED|rate limit/i.test(m));throw er}
  var c=d.candidates&&d.candidates[0],text=((c&&c.content&&c.content.parts)||[]).map(function(p){return p.text||''}).join('');
  var src=[];((c&&c.groundingMetadata&&c.groundingMetadata.groundingChunks)||[]).forEach(function(x){var t=x.web&&x.web.title;if(t&&src.indexOf(t)<0)src.push(t)});
  if(!text)throw new Error('AI ne jawab nahi diya.');
@@ -216,13 +216,23 @@ function planContext(){
  return l.join('\n');
 }
 function showAI(el,r){el.innerHTML='<div class="box" style="white-space:pre-wrap">'+esc(r.text)+'</div>'+(r.sources.length?'<div class="mu">Sources: '+r.sources.map(esc).join(', ')+'</div>':'')+'<div class="mu">AI ki baat galat ho sakti hai. Ye signal ke score me nahi judta (iska backtest nahi ho sakta), sirf chetavni hai.</div>'}
+var QMSG='Gemini ka free quota khatam hai. Kal dobara koshish karo, ya billing wali key lagao. Agar ye key Pehredaar ya Creator Studio me bhi chal rahi hai to unhone bhi quota kha liya hoga.';
 async function planAI(){
  var el=$('aiOut');el.textContent='AI soch raha hai (Google Search se khabar dhundh raha hai)...';
  if(!M.t){el.innerHTML='<span class="r">Pehle Market tab me refresh karo.</span>';return}
+ var tail='\n\nHinglish me 130 shabdon ke andar likho: 1) market ka mood 2) kaun se sector/theme strong ya kamzor aur kyun 3) aaj kin events/khabron se savdhan rehna 4) breakout trade ke liye ek dhyan rakhne wali baat. Kisi stock ko khareedne ya bechne ki salah mat do.';
  try{
-  var r=await gem('Tum ek Indian intraday market analyst ho. Aaj ki tareekh ke hisaab se Google Search se India ke bade news, global cues (US/Asia market, crude, dollar-rupee, FII/DII) aur aaj ke events dekho. Ye mera live market data hai:\n'+planContext()+'\n\nHinglish me 130 shabdon ke andar likho: 1) market ka mood 2) kaun se sector/theme strong ya kamzor aur kyun 3) aaj kin events/khabron se savdhan rehna 4) breakout trade ke liye ek dhyan rakhne wali baat. Kisi stock ko khareedne ya bechne ki salah mat do.',true);
+  var r=await gem('Tum ek Indian intraday market analyst ho. Aaj ki tareekh ke hisaab se Google Search se India ke bade news, global cues (US/Asia market, crude, dollar-rupee, FII/DII) aur aaj ke events dekho. Ye mera live market data hai:\n'+planContext()+tail,true);
   showAI(el,r);
- }catch(e){el.innerHTML='<span class="r">Dikkat: '+esc(e.message)+'</span>'}
+ }catch(e){
+  if(!e.quota){el.innerHTML='<span class="r">Dikkat: '+esc(e.message)+'</span>';return}
+  try{
+   el.textContent='Google Search ki limit khatam, ab sirf tumhare market data se plan bana raha hoon...';
+   var r2=await gem('Tum ek Indian intraday market analyst ho. Tumhare paas internet nahi hai, isliye sirf neeche diye gaye data par bolo aur koi khabar ya global cue mat banao. Ye mera live market data hai:\n'+planContext()+tail,false,'gemini-flash-lite-latest');
+   r2.text='[Google Search ki limit khatam. Ye plan sirf tumhare market data se bana hai, aaj ki khabar ya global cues nahi dekhe gaye.]\n\n'+r2.text;
+   showAI(el,r2);
+  }catch(e2){el.innerHTML='<span class="r">'+(e2.quota?esc(QMSG):'Dikkat: '+esc(e2.message))+'</span>'}
+ }
 }
 async function newsAI(sym,el,dir){
  el.textContent='Khabar dhundh raha hoon...';
@@ -235,7 +245,10 @@ async function newsAI(sym,el,dir){
   if(dir<0&&mood==='positive')warn='<div class="warn">Khabar SELL signal ke khilaaf hai. Savdhan.</div>';
   if(j.flag&&String(j.flag).toLowerCase()!=='none')warn+='<div class="warn">Jokhim: '+esc(j.flag)+'</div>';
   el.innerHTML='<div class="box"><span class="pill '+(mood==='positive'?'pg':(mood==='negative'?'pr':'po'))+'">'+esc(mood)+'</span> '+esc(j.summary||'')+'</div>'+warn+(r.sources.length?'<div class="mu">Sources: '+r.sources.map(esc).join(', ')+'</div>':'');
- }catch(e){el.innerHTML='<span class="r">Dikkat: '+esc(e.message)+'</span>'}
+ }catch(e){
+  if(e.quota)el.innerHTML='<div class="warn">Google Search wali free limit khatam hai, isliye khabar dekh nahi sakta. Bina search ke AI aaj ki khabar nahi jaanta, to main andaaza lagakar jawab nahi de raha.</div>';
+  else el.innerHTML='<span class="r">Dikkat: '+esc(e.message)+'</span>';
+ }
 }
 function buildAI(){
  $('tAI').innerHTML='<div class="card"><b>AI market plan aur news</b><label>Gemini API key (sirf is browser me save hoti hai)</label><input id="aiK" type="password" autocomplete="off"><button id="aiP">Aaj ka market plan</button><div id="aiOut" class="mu"></div></div>'+
@@ -362,25 +375,32 @@ setInterval(function(){if(M.t&&M.t!==lastT){lastT=M.t;LT={};tick();if($('tMap').
 function onTab(id){
  if(id==='tMap')renderMap();
  if(id==='tGame'){renderGame();liveFor()}
- if(id==='tRep')renderRep();
+ if(id==='tRep'){repOpts();renderRep()}
 }
 
 /* ---------- Time Machine (replay) ---------- */
-var RP=null,RPT=null;
+var RP=null,RPT=null,RPSTOP=false;
+function repOpts(){
+ var sel=$('rpU');if(!sel)return;var n=X.uniResolved().length,cur=sel.value||'wl';
+ if(sel.options.length===5){sel.options[4].textContent='Sab ('+n+' stock)';return}
+ var o=[['wl','Meri watchlist'],['80','Market list ke pehle 80'],['300','Market list ke pehle 300'],['600','Market list ke pehle 600'],['all','Sab ('+n+' stock)']];
+ sel.innerHTML=o.map(function(x){return '<option value="'+x[0]+'">'+x[1]+'</option>'}).join('');sel.value=cur;if(sel.value!==cur)sel.value='wl';
+}
 function weekdays(n){var d=X.ymd(X.istNow()),out=[];while(out.length<n){d=X.addDays(d,-1);var w=new Date(d+'T12:00:00').getDay();if(w!==0&&w!==6)out.push(d)}return out}
 function buildRep(){
  $('tRep').innerHTML='<div class="card"><b>⏳ Time Machine</b><div class="mu">Koi purana din chuno, usse 5-5 minute aage chalao jaise market live ho. Scanner us waqt jo signal deta, wo dikhega. Tum nakli trade lo, din ke ant me tumhara nateeja scanner ke 2 signal se milaya jayega.</div>'+
- '<div class="row"><div><label>Din</label><select id="rpD">'+weekdays(30).map(function(d){return '<option>'+d+'</option>'}).join('')+'</select></div><div><label>Kaun se stock</label><select id="rpU"><option value="wl">Meri watchlist</option><option value="40">Market list ke pehle 40</option><option value="80">Market list ke pehle 80</option></select></div></div>'+
- '<button id="rpL">Din load karo</button><div id="rpSt" class="mu"></div></div><div id="rpV"></div>';
- $('rpL').onclick=repLoad;
+ '<div class="row"><div><label>Din</label><select id="rpD">'+weekdays(30).map(function(d){return '<option>'+d+'</option>'}).join('')+'</select></div><div><label>Kaun se stock</label><select id="rpU"></select></div></div>'+
+ '<button id="rpL">Din load karo</button><button class="s" id="rpX">Roko aur ab tak ke stock se chalao</button><div id="rpSt" class="mu"></div><div class="mu">Zyada stock = zyada samay (pehli baar ~0.5 sec har stock), par ek baar load hone par phone me save rehta hai.</div></div><div id="rpV"></div>';
+ $('rpL').onclick=repLoad;$('rpX').onclick=function(){RPSTOP=true};repOpts();
 }
 async function repLoad(){
  if(!$('rpL'))return;var date=$('rpD').value,u=$('rpU').value,st=$('rpSt');
- var list=u==='wl'?X.resolved():X.uniResolved().slice(0,+u);
+ var list=u==='wl'?X.resolved():(u==='all'?X.uniResolved():X.uniResolved().slice(0,+u));
  if(list.length<5){st.textContent='Kam se kam 5 stock ke token chahiye (Settings me token dhundo).';return}
- $('rpL').disabled=true;var data={},tok={};
+ $('rpL').disabled=true;RPSTOP=false;var data={},tok={},t0=Date.now();
  for(var i=0;i<list.length;i++){
-  st.textContent='Data aa raha hai: '+list[i].sym+' ('+(i+1)+'/'+list.length+')';
+  if(RPSTOP&&Object.keys(data).length>=5)break;
+  st.textContent='Data aa raha hai: '+list[i].sym+' ('+(i+1)+'/'+list.length+')'+(i>2?'  ~'+Math.max(1,Math.round((Date.now()-t0)/i*(list.length-i)/60000))+' minute baaki':'');
   try{var cs=(await X.getCandles(list[i].token,date,date)).filter(function(c){return c.d===date});if(cs.length>=40){data[list[i].sym]=cs;tok[list[i].sym]=list[i].token}}catch(e){st.textContent='Dikkat '+list[i].sym+': '+e.message;await sleep(500)}
  }
  $('rpL').disabled=false;
@@ -396,7 +416,7 @@ function repClose(p,exit,reason){RP.pos=RP.pos.filter(function(q){return q.id!==
 function repOne(k){
  var P=X.cfg();
  RP.pos.slice().forEach(function(p){
-  var c=RP.data[p.sym][k];if(!c)return;if(k<=p.k)return;
+  var arr=RP.data[p.sym],c=arr[k];if(k<=p.k)return;if(!c){if(k>=RP.N-1)repClose(p,arr[arr.length-1].c,'Din khatam');return}
   var hs=p.dir>0?c.l<=p.sl:c.h>=p.sl,ht=p.dir>0?c.h>=p.tgt:c.l<=p.tgt;
   if(hs)repClose(p,p.sl,'Stop-loss');else if(ht)repClose(p,p.tgt,'Target');else if(k>=RP.N-1)repClose(p,c.c,'Din khatam');
  });
@@ -498,6 +518,56 @@ function renderBuckets(){
 }
 new MutationObserver(function(){renderBuckets()}).observe($('btOut'),{childList:true});
 
-buildMap();buildAI();buildRep();renderGame();
-window.XT={tick:tick,openPaper:openPaper,pp:pp,renderMap:renderMap,openChart:openChart,repLoad:repLoad,rp:function(){return RP},repGo:repGo,onTab:onTab,LT:function(){return LT},planAI:planAI,newsAI:newsAI};
+
+/* ---------- notification, awaaz, screen on ---------- */
+var NF={seen:{},date:'',WL:null,init:false};
+async function notify(title,body,tag){
+ var ok=false;
+ try{
+  if('Notification' in window&&Notification.permission==='granted'){
+   var reg=navigator.serviceWorker&&await navigator.serviceWorker.getRegistration();
+   if(reg&&reg.showNotification){await reg.showNotification(title,{body:body,tag:tag,vibrate:[300,150,300],requireInteraction:true});ok=true}
+   else{new Notification(title,{body:body,tag:tag});ok=true}
+  }
+ }catch(er){}
+ var topic=(ld('sig_ntfy','')||'').trim();
+ if(topic){try{await fetch('https://ntfy.sh/'+encodeURIComponent(topic),{method:'POST',body:body,headers:{'Title':title,'Priority':'high','Tags':'chart_with_upwards_trend'}});ok=true}catch(er2){}}
+ return ok;
+}
+function sigMsg(s){return {t:'Signal: '+(s.dir>0?'BUY ':'SELL ')+s.sym,b:'Entry '+f2(s.entry)+'  SL '+f2(s.sl)+'  Target '+f2(s.tgt)+(s.idx?'':'  Qty '+s.qty)+'  Score '+f2(s.score)}}
+function buildNotif(){
+ var c=mk('div','card','<b>🔔 Notification</b><div class="mu">Signal milte hi notification, awaaz aur vibration. Scan chalte waqt screen on rakhi jati hai (warna phone browser ko rok deta hai aur scan ruk jata hai).</div>'+
+ '<button id="nfOn">Notification chalu karo</button><button class="s" id="nfTest">Test notification</button><div id="nfSt" class="mu"></div>'+
+ '<label>ntfy topic (optional)</label><input id="nfTopic" placeholder="jaise: sig-8f3k29xq (lamba, random rakho)"><button class="s" id="nfSave">ntfy save + test</button>'+
+ '<div class="mu">ntfy: phone par ntfy app lagao aur yahi topic subscribe karo. Tab notification doosre app ke upar bhi aati hai. Topic sabke liye khula hota hai, isliye random naam rakho. Isme sirf stock ka naam aur levels jate hain.</div>');
+ $('tSig').appendChild(c);
+ $('nfTopic').value=ld('sig_ntfy','');
+ function stat(){var p=('Notification' in window)?Notification.permission:'nahi hai';$('nfSt').textContent='Notification ki ijazat: '+p+(NF.WL?'  |  Screen on: haan':'')}
+ $('nfOn').onclick=async function(){
+  try{if('serviceWorker' in navigator)await navigator.serviceWorker.register('sw.js')}catch(er){$('nfSt').textContent='sw.js nahi mili (file repo me daali?)'}
+  try{await Notification.requestPermission()}catch(er){}
+  stat();
+ };
+ $('nfTest').onclick=async function(){var ok=await notify('Test: Market Scanner','Notification theek chal rahi hai','test');$('nfSt').textContent=ok?'Test bhej diya. Notification aayi?':'Nahi gayi. Pehle "Notification chalu karo" dabao (aur browser me ijazat do).';};
+ $('nfSave').onclick=async function(){sv('sig_ntfy',$('nfTopic').value.trim());var ok=await notify('Test: ntfy','ntfy se notification theek chal rahi hai','test2');$('nfSt').textContent=ok?'Bhej diya.':'Nahi gayi.'};
+ stat();
+ try{if('serviceWorker' in navigator&&'Notification' in window&&Notification.permission==='granted')navigator.serviceWorker.register('sw.js').catch(function(){})}catch(er){}
+}
+function watchSignals(){
+ var T=X.today();
+ if(NF.date!==T.date){NF.date=T.date;if(!NF.init)NF.seen={}}
+ if(!NF.init){T.sigs.forEach(function(s){NF.seen[s.id]=1});NF.init=true;return}
+ T.sigs.forEach(function(s){if(NF.seen[s.id])return;NF.seen[s.id]=1;var m=sigMsg(s);notify(m.t,m.b,s.id)});
+}
+function watchWake(){
+ try{
+  if(X.S.run&&!NF.WL&&navigator.wakeLock){navigator.wakeLock.request('screen').then(function(l){NF.WL=l;l.addEventListener('release',function(){NF.WL=null})}).catch(function(){})}
+  if(!X.S.run&&NF.WL){NF.WL.release();NF.WL=null}
+ }catch(er){}
+}
+setInterval(function(){watchSignals();watchWake();if($('tRep')&&$('tRep').classList.contains('on'))repOpts()},2500);
+document.addEventListener('visibilitychange',function(){if(!document.hidden)watchWake()});
+
+buildMap();buildAI();buildRep();buildNotif();renderGame();
+window.XT={notify:notify,tick:tick,openPaper:openPaper,pp:pp,renderMap:renderMap,openChart:openChart,repLoad:repLoad,rp:function(){return RP},repGo:repGo,onTab:onTab,LT:function(){return LT},planAI:planAI,newsAI:newsAI};
 })();
