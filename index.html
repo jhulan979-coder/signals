@@ -81,8 +81,8 @@ pre{white-space:pre-wrap;margin:0;font:12.5px/1.5 ui-monospace,monospace}
 
 <div class="sec" id="tBt">
  <div class="card">
- <div class="row"><div><label>Kitne mahine</label><select id="btM"><option>3</option><option>6</option></select></div><div><label>Kaun se stock</label><select id="btU"><option value="wl">Meri watchlist</option><option value="60">Market list ke pehle 60</option><option value="120">Market list ke pehle 120</option></select></div></div>
- <button id="bBt">Backtest chalao</button><button class="s" id="bBtStop">Roko</button>
+ <div class="row"><div><label>Kitne mahine</label><select id="btM"><option>3</option><option>6</option></select></div><div><label>Kaun se stock</label><select id="btU"><option value="wl">Meri watchlist</option><option value="60">Market list ke pehle 60</option><option value="120">Market list ke pehle 120</option><option value="300">Market list ke pehle 300</option><option value="600">Market list ke pehle 600</option><option value="all">Sab (jitne token save hain)</option></select></div></div>
+ <button id="bBt">Backtest chalao</button><button class="s" id="bBtStop">Roko aur ab tak ka nateeja dikhao</button>
  <div id="btSt" class="mu"></div><div id="btOut"></div>
  </div>
 </div>
@@ -135,7 +135,7 @@ var IDX=[['Nifty 50',['NIFTY 50','NIFTY'],'99926000'],['Bank Nifty',['NIFTY BANK
 var DEF_WL='RELIANCE HDFCBANK ICICIBANK INFY TCS SBIN AXISBANK KOTAKBANK LT ITC BHARTIARTL TATASTEEL MARUTI SUNPHARMA BAJFINANCE HINDUNILVR NTPC ONGC POWERGRID M&M';
 var DEF={cap:100000,riskPct:0.5,cost:0.10,maxSig:2,minVol:1.5,minScore:5,orMin:15,lastEntry:'10:55',exitT:'15:10',minRange:0.3,maxRange:1.5,minRisk:0.25,maxRisk:1.0,minTurn:5,minPrice:20};
 var S={jwt:'',pubIp:'',run:false,btStop:false,uniStop:false,auto:false};
-var M={snap:{},names:{},idx:{},t:0,busy:false,filter:'all',limit:60,sel:''};
+var M={snap:{},names:{},idx:{},t:0,busy:false,filter:'lq',limit:60,sel:''};
 function ld(k,d){try{var v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(e){return d}}
 function sv(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
 function sleep(ms){return new Promise(function(r){setTimeout(r,ms)})}
@@ -494,7 +494,7 @@ function walkForward(pr,P){
 function btList(){
  var u=$('btU').value;
  if(u==='wl')return resolved();
- var n=+u;return uniResolved().slice(0,n);
+ if(u==='all')return uniResolved();var n=+u;return uniResolved().slice(0,n);
 }
 async function runBt(){
  if(S.run)return;
@@ -667,7 +667,7 @@ function pickCandidates(){
   if(up||dn)c.push(x);
  });
  c.sort(function(p,r){return Math.abs(r.pct)-Math.abs(p.pct)});
- var out=c.slice(0,25);
+ var out=c.slice(0,40);
  if(out.length<8){
   var seen={};out.forEach(function(x){seen[x.t]=1});
   a.slice().sort(function(p,r){return Math.abs(r.pct)-Math.abs(p.pct)}).forEach(function(x){if(out.length<12&&!seen[x.t]){out.push(x);seen[x.t]=1}});
@@ -800,7 +800,7 @@ $('bBt').onclick=runBt;$('bBtStop').onclick=function(){S.btStop=true};
 $('bEval').onclick=evalJournal;
 $('bClr').onclick=function(){if(confirm('Journal saaf karein?')){sv('sig_journal',[]);renderJournal()}};
 loadUi();
-window.SIG={detect:detect,firstBreak:firstBreak,explain:explain,simulate:simulate,pick:pick,stats:stats,verdict:verdict,prep:prep,walkForward:walkForward,scanData:scanData,cfg:cfg,byDay:byDay,chunks:chunks,S:S,M:M,login:login,resolveUni:resolveUni,refreshMarket:refreshMarket,pickCandidates:pickCandidates,discoverAll:discoverAll,liveCycle:liveCycle,runBt:runBt,breadth:breadth,UNI:UNI,today:today,tab:tab,getCandles:getCandles,quote:quote,istNow:istNow,ymd:ymd,hm:hm,addMin:addMin,addDays:addDays,f2:f2,esc:esc,sv:sv,ld:ld,idxResolved:idxResolved,uniResolved:uniResolved,resolved:resolved,liquid:liquid,circuitNear:circuitNear,stocksNow:stocksNow,showDet:showDet,makeSignal:makeSignal,breadthMaker:breadthMaker};
+window.SIG={detect:detect,firstBreak:firstBreak,explain:explain,simulate:simulate,pick:pick,stats:stats,verdict:verdict,prep:prep,walkForward:walkForward,scanData:scanData,cfg:cfg,byDay:byDay,chunks:chunks,S:S,M:M,login:login,resolveUni:resolveUni,refreshMarket:refreshMarket,pickCandidates:pickCandidates,discoverAll:discoverAll,liveCycle:liveCycle,runBt:runBt,breadth:breadth,UNI:UNI,today:today,tab:tab,buildPr:buildPr,getCandles:getCandles,quote:quote,istNow:istNow,ymd:ymd,hm:hm,addMin:addMin,addDays:addDays,f2:f2,esc:esc,sv:sv,ld:ld,idxResolved:idxResolved,uniResolved:uniResolved,resolved:resolved,liquid:liquid,circuitNear:circuitNear,stocksNow:stocksNow,showDet:showDet,makeSignal:makeSignal,breadthMaker:breadthMaker};
 })();
 </script>
 <script src="extras.js"></script>
