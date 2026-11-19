@@ -397,16 +397,22 @@ async function repLoad(){
  if(!$('rpL'))return;var date=$('rpD').value,u=$('rpU').value,st=$('rpSt');
  var list=u==='wl'?X.resolved():(u==='all'?X.uniResolved():X.uniResolved().slice(0,+u));
  if(list.length<5){st.textContent='Kam se kam 5 stock ke token chahiye (Settings me token dhundo).';return}
- $('rpL').disabled=true;RPSTOP=false;var data={},tok={},t0=Date.now();
+ $('rpL').disabled=true;RPSTOP=false;var data={},tok={},meta={},t0=Date.now();
  for(var i=0;i<list.length;i++){
   if(RPSTOP&&Object.keys(data).length>=5)break;
   st.textContent='Data aa raha hai: '+list[i].sym+' ('+(i+1)+'/'+list.length+')'+(i>2?'  ~'+Math.max(1,Math.round((Date.now()-t0)/i*(list.length-i)/60000))+' minute baaki':'');
-  try{var cs=(await X.getCandles(list[i].token,date,date)).filter(function(c){return c.d===date});if(cs.length>=40){data[list[i].sym]=cs;tok[list[i].sym]=list[i].token}}catch(e){st.textContent='Dikkat '+list[i].sym+': '+e.message;await sleep(500)}
+  try{
+   var cs=(await X.getCandles(list[i].token,date,date)).filter(function(c){return c.d===date});
+   if(cs.length>=40){
+    data[list[i].sym]=cs;tok[list[i].sym]=list[i].token;
+    try{var pd=X.byDay(await X.getCandles(list[i].token,X.addDays(date,-20),X.addDays(date,-1)));meta[list[i].sym]={prof:X.volProfile(Object.keys(pd).sort().slice(-10).map(function(d){return pd[d]}))}}catch(e3){}
+   }
+  }catch(e){st.textContent='Dikkat '+list[i].sym+': '+e.message;await sleep(500)}
  }
  $('rpL').disabled=false;
  if(Object.keys(data).length<5){st.textContent='Is din ka kaafi data nahi mila (chhutti ho sakti hai). Dusra din chuno.';return}
  var ref=Object.keys(data).sort(function(a,b){return data[b].length-data[a].length})[0];
- RP={date:date,data:data,tok:tok,ref:ref,N:data[ref].length,i:3,pos:[],hist:[],sigs:[],emitted:[],sel:'',playing:false,start:100000};
+ RP={date:date,data:data,tok:tok,meta:meta,ref:ref,N:data[ref].length,i:3,pos:[],hist:[],sigs:[],emitted:[],sel:'',playing:false,start:100000};
  st.textContent=Object.keys(data).length+' stock ka data aa gaya. Ab chalao.';
  repStepTo(3,true);renderRep();
 }
@@ -422,7 +428,7 @@ function repOne(k){
  });
  var part={};Object.keys(RP.data).forEach(function(s){part[s]=RP.data[s].slice(0,k+1)});
  var nowT=X.addMin(RP.data[RP.ref][Math.min(k,RP.N-1)].t,5),T={date:RP.date,emitted:RP.emitted,sigs:RP.sigs};
- var r=X.scanData(part,nowT,P,T,null,repBr(k));
+ var r=X.scanData(part,nowT,P,T,RP.meta,repBr(k));
  for(var j=0;j<r.sigs.length&&RP.sigs.length<P.maxSig;j++){
   var s=X.makeSignal(r.sigs[j],RP.tok[r.sigs[j].sym],P);s.date=RP.date;RP.sigs.push(s);RP.emitted.push(s.sym);if(!RP.sel)RP.sel=s.sym;
  }
