@@ -1,0 +1,118 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'extras.js'
+      - 'fib.js'
+      - 'sw.js'
+      - 'package.json'
+      - 'capacitor.config.json'
+      - '.github/workflows/apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Web files ko www me rakho
+        run: |
+          mkdir -p www
+          cp index.html www/index.html
+          for f in extras.js fib.js sw.js; do [ -f "$f" ] && cp "$f" "www/$f" || true; done
+          ls -la www
+
+      - name: Capacitor install
+        run: npm install --no-audit --no-fund
+
+      - name: Android project banao
+        run: |
+          npx cap add android
+          PKG_DIR=android/app/src/main/java/com/jhulan/marketscanner
+          mkdir -p "$PKG_DIR"
+          cat > "$PKG_DIR/MainActivity.java" <<'JAVA'
+          package com.jhulan.marketscanner;
+
+          import android.os.Bundle;
+          import android.view.WindowManager;
+          import com.getcapacitor.BridgeActivity;
+
+          public class MainActivity extends BridgeActivity {
+              @Override
+              public void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+              }
+          }
+          JAVA
+          MANIFEST=android/app/src/main/AndroidManifest.xml
+          grep -q POST_NOTIFICATIONS "$MANIFEST" || sed -i 's#<application#<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n    <uses-permission android:name="android.permission.VIBRATE" />\n    <application#' "$MANIFEST"
+          sed -i "s/versionCode 1/versionCode ${{ github.run_number }}/; s/versionName \"1.0\"/versionName \"1.${{ github.run_number }}\"/" android/app/build.gradle
+          npx cap sync android
+
+      - name: Fixed signing key tayyar karo
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+        run: |
+          mkdir -p signing
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > signing/key.jks
+            echo "KEYSRC=secret" >> "$GITHUB_ENV"
+          elif [ -f signing/key.b64 ]; then
+            base64 -d signing/key.b64 > signing/key.jks
+            echo "KEYSRC=repo" >> "$GITHUB_ENV"
+          else
+            keytool -genkeypair -keystore signing/key.jks -alias scanner -keyalg RSA -keysize 2048 -validity 36500 -storepass marketscanner -keypass marketscanner -dname "CN=Market Scanner, O=Personal, C=IN"
+            base64 -w0 signing/key.jks > signing/key.b64
+            echo "KEYSRC=new" >> "$GITHUB_ENV"
+          fi
+          keytool -list -keystore signing/key.jks -storepass marketscanner | tail -3
+
+      - name: Debug APK build
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Fixed key se sign karo
+        run: |
+          APK=android/app/build/outputs/apk/debug/app-debug.apk
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$APKSIGNER" sign --ks signing/key.jks --ks-pass pass:marketscanner --key-pass pass:marketscanner --ks-key-alias scanner --out market-scanner.apk "$APK"
+          "$APKSIGNER" verify --print-certs market-scanner.apk | head -3
+
+      - name: Naya key repo me save karo (sirf pehli baar)
+        if: env.KEYSRC == 'new'
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add signing/key.b64
+          git commit -m "Fixed signing key (pehli baar)"
+          git push
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: market-scanner-apk
+          path: market-scanner.apk
+
+      - name: Release me daalo (phone se download ke liye)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "apk-${{ github.run_number }}" market-scanner.apk --title "Market Scanner ${{ github.run_number }}" --notes "Auto build ${{ github.run_number }}"
