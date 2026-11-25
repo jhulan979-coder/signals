@@ -527,10 +527,21 @@ new MutationObserver(function(){renderBuckets()}).observe($('btOut'),{childList:
 
 /* ---------- notification, awaaz, screen on ---------- */
 var NF={seen:{},date:'',WL:null,init:false};
+function ln(){
+ try{
+  var C=window.Capacitor;if(!C)return null;
+  if(C.Plugins&&C.Plugins.LocalNotifications)return C.Plugins.LocalNotifications;
+  if(C.isNativePlatform&&C.isNativePlatform()&&C.registerPlugin)return C.registerPlugin('LocalNotifications');
+ }catch(e){}
+ return null;
+}
 async function notify(title,body,tag){
  var ok=false;
  try{
-  if('Notification' in window&&Notification.permission==='granted'){
+  var LN=ln();
+  if(LN&&LN.schedule){
+   await LN.schedule({notifications:[{id:Math.floor(Date.now()%2147483000),title:title,body:body,schedule:{at:new Date(Date.now()+400)}}]});ok=true;
+  }else if('Notification' in window&&Notification.permission==='granted'){
    var reg=navigator.serviceWorker&&await navigator.serviceWorker.getRegistration();
    if(reg&&reg.showNotification){await reg.showNotification(title,{body:body,tag:tag,vibrate:[300,150,300],requireInteraction:true});ok=true}
    else{new Notification(title,{body:body,tag:tag});ok=true}
@@ -549,8 +560,10 @@ function buildNotif(){
  $('tSig').appendChild(c);
  $('nfTopic').value=ld('sig_ntfy','');
  function stat(){var p=('Notification' in window)?Notification.permission:'nahi hai';$('nfSt').textContent='Notification ki ijazat: '+p+(NF.WL?'  |  Screen on: haan':'')}
- $('nfOn').onclick=async function(){
-  try{if('serviceWorker' in navigator)await navigator.serviceWorker.register('sw.js')}catch(er){$('nfSt').textContent='sw.js nahi mili (file repo me daali?)'}
+  $('nfOn').onclick=async function(){
+  var LN=ln();
+  if(LN&&LN.requestPermissions){try{var r=await LN.requestPermissions();$('nfSt').textContent='App notification ki ijazat: '+(r&&r.display||'?')}catch(er){$('nfSt').textContent='Ijazat nahi maangi ja saki: '+er.message}return}
+  try{if('serviceWorker' in navigator)await navigator.serviceWorker.register('sw.js')}catch(er){$('nfSt').textContent='sw.js nahi mili (file repo me daali?)';return}
   try{await Notification.requestPermission()}catch(er){}
   stat();
  };
