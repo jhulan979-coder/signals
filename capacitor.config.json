@@ -1,0 +1,9 @@
+{
+  "appId": "com.jhulan.marketscanner",
+  "appName": "Market Scanner",
+  "webDir": "www",
+  "server": { "androidScheme": "https" },
+  "plugins": {
+    "CapacitorHttp": { "enabled": true }
+  }
+}
