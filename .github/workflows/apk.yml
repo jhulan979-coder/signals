@@ -8,6 +8,7 @@ on:
       - 'extras.js'
       - 'fib.js'
       - 'home.js'
+      - 'fixes.js'
       - 'sw.js'
       - 'package.json'
       - 'capacitor.config.json'
@@ -42,7 +43,7 @@ jobs:
         run: |
           mkdir -p www
           cp index.html www/index.html
-          for f in extras.js fib.js home.js sw.js; do [ -f "$f" ] && cp "$f" "www/$f" || true; done
+          for f in extras.js fib.js home.js fixes.js sw.js; do [ -f "$f" ] && cp "$f" "www/$f" || true; done
           ls -la www
 
       - name: Capacitor install
